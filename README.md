@@ -7,6 +7,7 @@ A distributed database for fuzzy matching string fields of records.
 
 Examples
 --------
+```bash
 ./cqdb -i croeus -t 15605 -l 127.0.0.1 -p 15605
 ./cqdb -i crius -t 15606 -l 127.0.0.1 -p 15606 -s 127.0.0.1 -e 15605
 ./cqdb -i cronus -t 15607 -l 127.0.0.1 -p 15607 -s 127.0.0.1 -e 15605
@@ -18,3 +19,4 @@ Examples
 ./cqdb -i tethys -t 15613 -l 127.0.0.1 -p 15613 -s 127.0.0.1 -e 15605
 ./cqdb -i theia -t 15614 -l 127.0.0.1 -p 15614 -s 127.0.0.1 -e 15605
 ./cqdb -i themis -t 15615 -l 127.0.0.1 -p 15615 -s 127.0.0.1 -e 15605
+```

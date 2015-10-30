@@ -52,8 +52,8 @@ fn main() {
     let (start_handle, rx) = service_handle.start();
     while let Ok(event) = rx.recv() {
         match event {
-            Event::JoinMsgEvent(id, token, socket_addr) => {
-                println!("recv JoinMsgEvent({}, {}, {})", id, token , socket_addr);
+            Event::JoinMsgEvent(id, token, ip, port) => {
+                println!("recv JoinMsgEvent({}, {}, {}, {})", id, token, ip, port);
             },
             Event::LookupMsgEvent(token) => {
                 println!("recv LookupMsgEvent({})", token);

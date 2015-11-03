@@ -1,9 +1,16 @@
 extern crate argparse;
 use argparse::{ArgumentParser,Store};
 
-extern crate rustp2p;
-use rustp2p::omniscient::event::Event;
-use rustp2p::omniscient::service::OmniscientService;
+extern crate capnp;
+mod message_capnp {
+    include!(concat!(env!("OUT_DIR"), "/message_capnp.rs"));
+}
+
+mod event;
+use event::Event;
+
+mod service;
+use service::OmniscientService;
 
 use std::net::{Ipv4Addr,SocketAddrV4};
 use std::str::FromStr;
@@ -70,33 +77,5 @@ fn main() {
             },
             //_ => println!("not processing this event type"),
         }
-    }
-
-    //syntax prototyping
-    let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
-    let (stream_rx, event_rx) = service_handle.start();
-
-    //start up a new thread
-    thread::spawn(move || {
-        while let Ok(event) = event_rx.recv() {
-            match event {
-                Event::LookupMsgEvent(token) => {
-
-                },
-                _ => {},
-            }
-        }
-    });
-
-    while let Ok(stream) = stream_rx.recv() {
-        //TODO read from the stream
-    }
-
-    //if you don't care about events triggered by the service
-    let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
-    let (rx, _) = service_handle.start(); //returns channels for an TcpStreams (application communication) and events (rustp2p service)
-
-    while let Ok(stream) = rx.recv() {
-        //TODO read from the stream
     }
 }

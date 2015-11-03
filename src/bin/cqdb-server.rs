@@ -9,13 +9,13 @@ use std::net::{Ipv4Addr,SocketAddrV4};
 use std::str::FromStr;
 
 fn main() {
-   let mut id = "World".to_string();
-   let mut token: u64 = 0 as u64;
-   let mut listen_ip: String = "127.0.0.1".to_string();
-   let mut listen_port: u16 = 0 as u16;
-   let mut seed_ip: String = "127.0.0.1".to_string();
-   let mut seed_port: u16 = 0 as u16;
-   {    //solely to limit scope of parser variable
+    let mut id = "World".to_string();
+    let mut token: u64 = 0 as u64;
+    let mut listen_ip: String = "127.0.0.1".to_string();
+    let mut listen_port: u16 = 0 as u16;
+    let mut seed_ip: String = "127.0.0.1".to_string();
+    let mut seed_port: u16 = 0 as u16;
+    {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
         parser.set_description("Start up a cqdb node");
         parser.refer(&mut id).add_option(&["-i", "--id"], Store, "ID of node").required();
@@ -25,7 +25,7 @@ fn main() {
         parser.refer(&mut seed_ip).add_option(&["-s", "--seed-ip"], Store, "Ip address for seed node");
         parser.refer(&mut seed_port).add_option(&["-e", "--seed-port"], Store, "Port for seed node");
         parser.parse_args_or_exit();
-   }
+    }
 
     let listen_ip = match Ipv4Addr::from_str(&listen_ip[..]) {
         Ok(listen_ip) => listen_ip,
@@ -49,7 +49,6 @@ fn main() {
     let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
 
     //start the service handle
-    //TODO start this as a new thread
     let rx = service_handle.start();
     while let Ok(event) = rx.recv() {
         match event {

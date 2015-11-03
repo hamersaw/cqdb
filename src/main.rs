@@ -2,8 +2,8 @@ extern crate argparse;
 use argparse::{ArgumentParser,Store};
 
 extern crate rustp2p;
-use rustp2p::event::Event;
-use rustp2p::service::omniscient::OmniscientService;
+use rustp2p::omniscient::event::Event;
+use rustp2p::omniscient::service::OmniscientService;
 
 use std::net::{Ipv4Addr,SocketAddrV4};
 use std::str::FromStr;
@@ -17,7 +17,7 @@ fn main() {
    let mut seed_port: u16 = 0 as u16;
    {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
-        parser.set_description("Start up a gossiping bearbones node");
+        parser.set_description("Start up a cqdb node");
         parser.refer(&mut id).add_option(&["-i", "--id"], Store, "ID of node").required();
         parser.refer(&mut token).add_option(&["-t", "--token"], Store, "Token of node").required();
         parser.refer(&mut listen_ip).add_option(&["-l", "--listen-ip"], Store, "Ip address to listen on").required();
@@ -49,21 +49,54 @@ fn main() {
     let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
 
     //start the service handle
-    let (start_handle, rx) = service_handle.start();
+    //TODO start this as a new thread
+    let (_, rx) = service_handle.start();
     while let Ok(event) = rx.recv() {
         match event {
-            Event::JoinMsgEvent(id, token, ip, port) => {
-                println!("recv JoinMsgEvent({}, {}, {}, {})", id, token, ip, port);
-            },
-            Event::LookupMsgEvent(token) => {
-                println!("recv LookupMsgEvent({})", token);
-            },
             Event::GenericMsgEvent(vec, _) => {
                 println!("recv GenericMsgEvent() of length {}", vec.len());
             }
-            _ => println!("not processing this event type"),
+            Event::LookupMsgEvent(token) => {
+                println!("recv LookupMsgEvent({})", token);
+            },
+            Event::PeerTableMsgEvent(peer_table) => {
+                println!("PeerTableMsgEvent");
+                for (token, socket_addr) in peer_table.iter() {
+                    println!("{}: {}", token, socket_addr);
+                }
+            },
+            Event::RegisterTokenMsgEvent(token, socket_addr) => {
+                println!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr);
+            },
+            //_ => println!("not processing this event type"),
         }
     }
- 
-    start_handle.join().unwrap();
+
+    //syntax prototyping
+    let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
+    let (stream_rx, event_rx) = service_handle.start();
+
+    //start up a new thread
+    thread::spawn(move || {
+        while let Ok(event) = event_rx.recv() {
+            match event {
+                Event::LookupMsgEvent(token) => {
+
+                },
+                _ => {},
+            }
+        }
+    });
+
+    while let Ok(stream) = stream_rx.recv() {
+        //TODO read from the stream
+    }
+
+    //if you don't care about events triggered by the service
+    let service_handle = OmniscientService::new(id, token, listen_addr, seed_addr);
+    let (rx, _) = service_handle.start(); //returns channels for an TcpStreams (application communication) and events (rustp2p service)
+
+    while let Ok(stream) = rx.recv() {
+        //TODO read from the stream
+    }
 }

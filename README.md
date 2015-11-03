@@ -20,3 +20,7 @@ Examples
 ./cqdb -i theia -t 15614 -l 127.0.0.1 -p 15614 -s 127.0.0.1 -e 15605
 ./cqdb -i themis -t 15615 -l 127.0.0.1 -p 15615 -s 127.0.0.1 -e 15605
 ```
+
+TODO
+----
+* Figure out generic message passing in rustp2p

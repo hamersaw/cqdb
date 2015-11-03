@@ -1,16 +1,9 @@
 extern crate argparse;
 use argparse::{ArgumentParser,Store};
 
-extern crate capnp;
-mod message_capnp {
-    include!(concat!(env!("OUT_DIR"), "/message_capnp.rs"));
-}
-
-mod event;
-use event::Event;
-
-mod service;
-use service::OmniscientService;
+extern crate cqdb;
+use cqdb::event::Event;
+use cqdb::service::OmniscientService;
 
 use std::net::{Ipv4Addr,SocketAddrV4};
 use std::str::FromStr;
@@ -57,7 +50,7 @@ fn main() {
 
     //start the service handle
     //TODO start this as a new thread
-    let (_, rx) = service_handle.start();
+    let rx = service_handle.start();
     while let Ok(event) = rx.recv() {
         match event {
             Event::GenericMsgEvent(vec, _) => {

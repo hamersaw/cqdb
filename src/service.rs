@@ -12,7 +12,6 @@ use std::str::FromStr;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::{channel,Receiver};
 use std::thread;
-use std::thread::JoinHandle;
 
 pub struct OmniscientService {
     id: String,
@@ -33,7 +32,7 @@ impl OmniscientService {
         }
     }
 
-    pub fn start(&self) -> (JoinHandle<()>, Receiver<Event>) {
+    pub fn start(&self) -> Receiver<Event> {
         //create listener
         let listener = match TcpListener::bind(self.listen_addr) {
             Ok(listener) => listener,
@@ -47,18 +46,16 @@ impl OmniscientService {
         };
 
         //create stream and event channels
-        let (event_tx, event_rx) = channel::<Event>();
-        let (stream_tx, stream_rx) = channel::<&'static mut TcpStream>();
+        let (tx, rx) = channel::<Event>();
 
         //start listening
         let peer_table = self.peer_table.clone();
         let token = self.token.clone();
         let listen_addr = self.listen_addr.clone();
-        let handle = thread::spawn(move || {
+        thread::spawn(move || {
             for stream in listener.incoming() {
                 let peer_table = peer_table.clone();
-                let event_tx = event_tx.clone();
-                let stream_tx = stream_tx.clone();
+                let tx = tx.clone();
 
                 thread::spawn(move || {
                     let mut stream = stream.unwrap();
@@ -70,11 +67,11 @@ impl OmniscientService {
                     //parse out message
                     match msg.get_msg_type().which() {
                         Ok(GenericMsg(generic_msg)) => {
-                            event_tx.send(Event::GenericMsgEvent(generic_msg.get_data().unwrap().to_vec(), stream)).unwrap();
+                            tx.send(Event::GenericMsgEvent(generic_msg.get_data().unwrap().to_vec(), stream)).unwrap();
                             //stream_tx.send(&stream).unwrap();
                         },
                         Ok(LookupMsg(lookup_msg)) => {
-                            event_tx.send(Event::LookupMsgEvent(lookup_msg.get_token())).unwrap();
+                            tx.send(Event::LookupMsgEvent(lookup_msg.get_token())).unwrap();
 
                             //create result message
                             let mut msg_builder = capnp::message::Builder::new_default();
@@ -115,13 +112,13 @@ impl OmniscientService {
                             }
 
                             //send event
-                            event_tx.send(Event::PeerTableMsgEvent(map)).unwrap();
+                            tx.send(Event::PeerTableMsgEvent(map)).unwrap();
                         },
                         Ok(RegisterTokenMsg(register_token_msg)) => {
                             let msg_socket_addr = register_token_msg.get_socket_addr().unwrap();
                             let ip_addr = Ipv4Addr::from_str(&msg_socket_addr.get_ip().unwrap()[..]).unwrap();
                             let socket_addr = SocketAddrV4::new(ip_addr, msg_socket_addr.get_port());
-                            event_tx.send(Event::RegisterTokenMsgEvent(register_token_msg.get_token(), socket_addr.clone())).unwrap();
+                            tx.send(Event::RegisterTokenMsgEvent(register_token_msg.get_token(), socket_addr.clone())).unwrap();
 
                             {
                                 //add token and socket address to peer table
@@ -215,10 +212,10 @@ impl OmniscientService {
             None => {},
         }
 
-        (handle, event_rx)
+        rx
     }
 
-    pub fn lookup(&self, token: u64) -> Option<SocketAddrV4> {
+    /*pub fn lookup(&self, token: u64) -> Option<SocketAddrV4> {
         let peer_table = self.peer_table.clone();
         let peer_table = peer_table.read().unwrap();
 
@@ -254,7 +251,7 @@ impl OmniscientService {
     //pub fn broadcast_msg(&self, msg: Vec<u8>) -> Result<(), String> {
     pub fn broadcast_msg(&self, _: Vec<u8>) -> Result<(), String> {
         unimplemented!();
-    }
+    }*/
 
     pub fn print(&self) {
         println!("ID:{}\ntoken:{}", self.id, self.token);

@@ -24,9 +24,10 @@ Server
 
 Client
 ```bash
-./cqdb-client -h 127.0.0.1 -p 15605
+./cqdb-client -i 127.0.0.1 -p 15605
 ````
 
 TODO
 ----
-* communication between client and servers
+* parse out csv file and load into db
+* add robustness to client error handling

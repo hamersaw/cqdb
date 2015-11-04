@@ -52,9 +52,6 @@ fn main() {
     let rx = service_handle.start();
     while let Ok(event) = rx.recv() {
         match event {
-            Event::GenericMsgEvent(vec, _) => {
-                println!("recv GenericMsgEvent() of length {}", vec.len());
-            }
             Event::LookupMsgEvent(token) => {
                 println!("recv LookupMsgEvent({})", token);
             },
@@ -67,7 +64,7 @@ fn main() {
             Event::RegisterTokenMsgEvent(token, socket_addr) => {
                 println!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr);
             },
-            //_ => println!("not processing this event type"),
+            _ => println!("not processing this event type"),
         }
     }
 }

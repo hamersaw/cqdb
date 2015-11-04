@@ -31,3 +31,4 @@ TODO
 ----
 * parse out csv file and load into db
 * add robustness to client error handling
+* need to allow bulk loading of values - don't create a connection for each insert

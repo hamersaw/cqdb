@@ -1,11 +1,12 @@
 extern crate capnp;
 
 use message_capnp;
-use message_capnp::message::msg_type::{GenericMsg,LookupMsg,PeerTableMsg,RegisterTokenMsg};
+use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,RegisterTokenMsg};
 
 use event::Event;
 
 use std::collections::BTreeMap;
+use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
 use std::str::FromStr;
@@ -45,7 +46,7 @@ impl OmniscientService {
             Err(e) => panic!("{}", e),
         };
 
-        //create stream and event channels
+        //create event channels
         let (tx, rx) = channel::<Event>();
 
         //start listening
@@ -66,9 +67,25 @@ impl OmniscientService {
 
                     //parse out message
                     match msg.get_msg_type().which() {
-                        Ok(GenericMsg(generic_msg)) => {
-                            tx.send(Event::GenericMsgEvent(generic_msg.get_data().unwrap().to_vec(), stream)).unwrap();
-                            //stream_tx.send(&stream).unwrap();
+                        Ok(InsertEntityMsg(insert_entity_msg)) => {
+                            //TODO send event to channel
+
+                            //compute hash over all fields
+                            let mut hasher = SipHasher::new();
+                            for field in insert_entity_msg.get_fields().unwrap().iter() {
+                                field.get_value().unwrap().hash(&mut hasher);
+                            }
+                            let hash_token = hasher.finish();
+
+                            //lookup into peer table
+                            let peer_table = peer_table.read().unwrap();
+                            let socket_addr = match lookup(&peer_table, hash_token) {
+                                Some(socket_addr) => socket_addr,
+                                None => panic!("error in looking up token in the peer table"),
+                            };
+
+                            //TODO forward insert to correct node if needed otherwise insert into local cache 
+                            println!("need to write to socket {}", socket_addr);
                         },
                         Ok(LookupMsg(lookup_msg)) => {
                             tx.send(Event::LookupMsgEvent(lookup_msg.get_token())).unwrap();

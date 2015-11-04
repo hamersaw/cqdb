@@ -5,8 +5,8 @@ struct Message {
 		addrMsg :group {
 			socketAddr @0 :SocketAddr;
 		}
-		genericMsg :group {
-			data @1 :Data;
+		insertEntityMsg :group {
+			fields @1 :List(Field);
 		}
 		lookupMsg :group {
 			token @2 :UInt64;
@@ -24,6 +24,11 @@ struct Message {
 			errMsg @8 :Text;
 		}
 	}
+}
+
+struct Field {
+	key @0 :Text;
+	value @1 :Text;
 }
 
 struct PeerAddr {

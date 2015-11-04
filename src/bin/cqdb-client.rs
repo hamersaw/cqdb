@@ -3,12 +3,15 @@ use argparse::{ArgumentParser,Store};
 
 extern crate csv;
 
+extern crate capnp;
+
 extern crate cqdb;
-//use cqdb::message_capnp;
+use cqdb::message_capnp;
+//use cqdb::message_capnp::message::msg_type::{InsertEntityMsg};
 
 use std::io;
 use std::io::prelude::*; //needed for flushing stdout
-use std::net::{Ipv4Addr,SocketAddrV4};
+use std::net::{Ipv4Addr,SocketAddrV4,TcpStream};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -61,21 +64,31 @@ fn main() {
                 let header = reader.headers().unwrap();
 
                 //read records
-                println!("dataset: {}", filename);
                 let mut record_count = 0;
                 for record in reader.records() {
                     let record = record.unwrap();
 
-                    println!("----record----");
-                    for i in 0..header.len() {
-                        println!("{}: {}", header[i], record[i]);
+                    //create insert entity message
+                    let mut msg_builder = capnp::message::Builder::new_default();
+                    {
+                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                        let insert_entity_msg = msg.get_msg_type().init_insert_entity_msg();
+                        let mut fields = insert_entity_msg.init_fields(header.len() as u32);
+                        for i in 0..header.len() {
+                            let mut field = fields.borrow().get(i as u32);                            
+                            field.set_key(&header[i][..]);
+                            field.set_value(&record[i][..]);
+                        }
                     }
 
-                    //TODO create insert data messages and send off to host
+                    //send insert entity message
+                    let mut stream = TcpStream::connect(host_addr).unwrap();
+                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
                     record_count += 1;
                 }
 
-                println!("\tprocessed {} records", record_count);
+                println!("\t{}: {} records", filename, record_count);
             },
             "query" => {
                 println!("TODO process query with db at {}", host_addr);

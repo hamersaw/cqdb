@@ -3,8 +3,8 @@
 ##Overview
 A distributed database for fuzzy matching entities.
 
-##Examples
-###Server
+##Execution Examples
+####Server
 ```bash
 ./cqdb-server -i croeus -t 15605 -l 127.0.0.1 -p 15605
 ./cqdb-server -i crius -t 15606 -l 127.0.0.1 -p 15606 -s 127.0.0.1 -e 15605
@@ -19,7 +19,7 @@ A distributed database for fuzzy matching entities.
 ./cqdb-server -i themis -t 15615 -l 127.0.0.1 -p 15615 -s 127.0.0.1 -e 15605
 ```
 
-###Client
+####Client
 ```bash
 ./cqdb-client -i 127.0.0.1 -p 15605
 ````
@@ -67,12 +67,11 @@ node3 - token:99
 			rammer -> 43
 ```
 
-###Insertions
+####Insertions
 - "first_name:daniel middle_name:peter last_name:rammer" -> hash -> 43
 - daniel -> hash -> 23
 - peter -> hash -> 27
 - rammer -> hash -> 68
-
 - "first_name:daniel middle_name:wroughton last_name:craig" -> hash -> 58
 - daniel -> hash -> 23
 - wroughton -> hash -> 54

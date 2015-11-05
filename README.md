@@ -44,6 +44,7 @@ Storage Architecture Example
 ----------------------------
 For this example the token space is 0-99
 
+```
 node1 - token:33
 	entities:
 	fields:
@@ -69,19 +70,21 @@ node3 - token:99
 		last_name:
 			craig -> 58
 			rammer -> 43
+```
 
-Insertions
-	"first_name:daniel middle_name:peter last_name:rammer" -> hash -> 43
-	daniel -> hash -> 23
-	peter -> hash -> 27
-	rammer -> hash -> 68
+#Insertions
+"first_name:daniel middle_name:peter last_name:rammer" -> hash -> 43
+daniel -> hash -> 23
+peter -> hash -> 27
+rammer -> hash -> 68
 
-	"first_name:daniel middle_name:wroughton last_name:craig" -> hash -> 58
-	daniel -> hash -> 23
-	wroughton -> hash -> 54
-	craig -> hash -> 83
+"first_name:daniel middle_name:wroughton last_name:craig" -> hash -> 58
+daniel -> hash -> 23
+wroughton -> hash -> 54
+craig -> hash -> 83
 
 TODO
 ----
+* format the storage architecture example
 * add robustness to client error handling
 * need to allow bulk loading of values - don't create a connection for each insert

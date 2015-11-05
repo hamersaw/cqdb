@@ -3,7 +3,7 @@ cqdb - Complex Query Database
 
 Overview
 --------
-A distributed database for fuzzy matching string fields of records.
+A distributed database for fuzzy matching entities.
 
 Examples
 --------
@@ -26,9 +26,62 @@ Client
 ```bash
 ./cqdb-client -i 127.0.0.1 -p 15605
 ````
+Storage Architecture Concepts
+-----------------------------
+* All of the fields of an entity are hashed to compute a record key
+* A entities record key determines which node the entities full set of field values is stored on
+* Each field value of an entity is hashed to compute a field value key
+* A pointer to the record key is stored on the appropriate machine for each field value
+
+Query Order of Events
+---------------------
+1. Queries are parsed and each individual filter is sent to every node
+2. A set of entity keys is returned from each node for each filter
+3. The union of those sets is determined to be entities that match the query
+4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
+
+Storage Architecture Example
+----------------------------
+For this example the token space is 0-99
+
+node1 - token:33
+	entities:
+	fields:
+		first_name:
+			daniel -> 23,43
+		middle_name:
+			peter -> 43
+		last_name:
+node2 - token:66
+	entities:
+		43 -> "first_name:daniel middle_name:peter last_name:rammer"
+		58 -> "first_name:daniel middle_name:wroughton last_name:craig"
+	fields:
+		first_name:
+		middle_name:
+			wroughton -> 58
+		last_name:
+node3 - token:99
+	entities:
+	fields:
+		first_name:
+		middle_name:
+		last_name:
+			craig -> 58
+			rammer -> 43
+
+Insertions
+	"first_name:daniel middle_name:peter last_name:rammer" -> hash -> 43
+	daniel -> hash -> 23
+	peter -> hash -> 27
+	rammer -> hash -> 68
+
+	"first_name:daniel middle_name:wroughton last_name:craig" -> hash -> 58
+	daniel -> hash -> 23
+	wroughton -> hash -> 54
+	craig -> hash -> 83
 
 TODO
 ----
-* parse out csv file and load into db
 * add robustness to client error handling
 * need to allow bulk loading of values - don't create a connection for each insert

@@ -1,11 +1,11 @@
 extern crate capnp;
 
 use message_capnp;
-use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,RegisterTokenMsg};
+use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
 
 use event::Event;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap,HashMap};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
@@ -34,6 +34,12 @@ impl OmniscientService {
     }
 
     pub fn start(&self) -> Receiver<Event> {
+        //add your token to peer_table
+        {
+            let mut peer_table = self.peer_table.write().unwrap();
+            peer_table.insert(self.token, self.listen_addr);
+        }
+
         //create listener
         let listener = match TcpListener::bind(self.listen_addr) {
             Ok(listener) => listener,
@@ -71,21 +77,60 @@ impl OmniscientService {
                             //TODO send event to channel
 
                             //compute hash over all fields
-                            let mut hasher = SipHasher::new();
+                            let mut concat_string = String::new();
                             for field in insert_entity_msg.get_fields().unwrap().iter() {
-                                field.get_value().unwrap().hash(&mut hasher);
+                                concat_string = concat_string + field.get_value().unwrap();
                             }
-                            let hash_token = hasher.finish();
+                            let mut hasher = SipHasher::new();
+                            concat_string.hash(&mut hasher);
+                            let entity_token = hasher.finish();
 
                             //lookup into peer table
                             let peer_table = peer_table.read().unwrap();
-                            let socket_addr = match lookup(&peer_table, hash_token) {
+                            let socket_addr = match lookup(&peer_table, entity_token) {
                                 Some(socket_addr) => socket_addr,
                                 None => panic!("error in looking up token in the peer table"),
                             };
 
-                            //TODO forward insert to correct node if needed otherwise insert into local cache 
-                            println!("need to write to socket {}", socket_addr);
+                            //create write entity message
+                            let mut msg_builder = capnp::message::Builder::new_default();
+                            {
+                                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                let mut write_entity_msg = msg.get_msg_type().init_write_entity_msg();
+                                write_entity_msg.set_entity_token(entity_token);
+                                write_entity_msg.set_fields(insert_entity_msg.get_fields().unwrap()).unwrap();
+                            }
+
+                            //send write entity message
+                            let mut stream = TcpStream::connect(socket_addr).unwrap();
+                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                            //send write field value message
+                            for field in insert_entity_msg.get_fields().unwrap().iter() {
+                                //compute hash of field value
+                                let mut hasher = SipHasher::new();
+                                field.get_value().unwrap().hash(&mut hasher);
+                                let field_token = hasher.finish();
+
+                                //lookup into peer table
+                                let socket_addr = match lookup(&peer_table, field_token) {
+                                    Some(socket_addr) => socket_addr,
+                                    None => panic!("error in looking up token in the peer table"),
+                                };
+
+                                //create write field message
+                                let mut msg_builder = capnp::message::Builder::new_default();
+                                {
+                                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                    let mut write_field_msg = msg.get_msg_type().init_write_field_msg();
+                                    write_field_msg.set_entity_token(entity_token);
+                                    write_field_msg.set_field(field).unwrap();
+                                }
+
+                                //send write field message
+                                let mut stream = TcpStream::connect(socket_addr).unwrap();
+                                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                            }
                         },
                         Ok(LookupMsg(lookup_msg)) => {
                             tx.send(Event::LookupMsgEvent(lookup_msg.get_token())).unwrap();
@@ -190,7 +235,7 @@ impl OmniscientService {
                                 //send register token message to all peers
                                 let peer_table = peer_table.read().unwrap();
                                 for (peer_token, peer_socket_addr) in peer_table.iter() {
-                                    if register_token_msg.get_token() == *peer_token {
+                                    if *peer_token == register_token_msg.get_token() || *peer_token == token {
                                         continue;
                                     }
 
@@ -198,6 +243,21 @@ impl OmniscientService {
                                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                                 }
                             }
+                        },
+                        Ok(WriteEntityMsg(write_entity_msg)) => {
+                            //TODO send write entity message event
+                            println!("write entity message for token {}", write_entity_msg.get_entity_token());
+
+                            let mut entity = HashMap::new();
+                            for field in  write_entity_msg.get_fields().unwrap().iter() {
+                                entity.insert(field.get_key().unwrap(), field.get_value().unwrap());
+                            }
+
+                            //TODO add entity to entities map
+                        },
+                        Ok(WriteFieldMsg(write_field_msg)) => {
+                            //TODO send write field value message event
+                            println!("write field message for token {}", write_field_msg.get_entity_token());
                         },
                         Ok(_) => panic!("Unknown message type"),
                         Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
@@ -209,8 +269,6 @@ impl OmniscientService {
         //send join message to seed_addr
         match self.seed_addr {
             Some(seed_addr) => {
-                let mut stream = TcpStream::connect(seed_addr).unwrap();
-
                 //create join message
                 let mut msg_builder = capnp::message::Builder::new_default();
                 {
@@ -224,6 +282,7 @@ impl OmniscientService {
                 }
 
                 //send join message
+                let mut stream = TcpStream::connect(seed_addr).unwrap();
                 capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
             },
             None => {},

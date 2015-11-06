@@ -23,6 +23,14 @@ struct Message {
 			success @7 :Bool;
 			errMsg @8 :Text;
 		}
+		writeEntityMsg :group {
+			entityToken @9 :UInt64;
+			fields @10 :List(Field);
+		}
+		writeFieldMsg: group {
+			entityToken @11 :UInt64;
+			field @12 :Field;
+		}
 	}
 }
 

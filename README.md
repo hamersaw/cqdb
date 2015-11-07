@@ -78,6 +78,6 @@ node3 - token:99
 - craig -> hash -> 83
 
 ##TODO
-- handle write entity/field messages
+- send write entity/field events
 - add robustness to client error handling
 - need to allow bulk loading of values - don't create a connection for each insert

@@ -5,7 +5,7 @@ use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,Re
 
 use event::Event;
 
-use std::collections::{BTreeMap,HashMap};
+use std::collections::{BTreeMap,HashMap,LinkedList};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
@@ -20,6 +20,8 @@ pub struct OmniscientService {
     listen_addr: SocketAddrV4,
     seed_addr: Option<SocketAddrV4>,
     peer_table: Arc<RwLock<BTreeMap<u64,SocketAddrV4>>>,
+    entities: Arc<RwLock<HashMap<u64,HashMap<String,String>>>>,
+    fields: Arc<RwLock<HashMap<String,HashMap<String,LinkedList<u64>>>>>,
 }
 
 impl OmniscientService {
@@ -30,6 +32,8 @@ impl OmniscientService {
             listen_addr: listen_addr,
             seed_addr: seed_addr,
             peer_table: Arc::new(RwLock::new(BTreeMap::new())),
+            entities: Arc::new(RwLock::new(HashMap::new())),
+            fields: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -57,11 +61,15 @@ impl OmniscientService {
 
         //start listening
         let peer_table = self.peer_table.clone();
+        let entities = self.entities.clone();
+        let fields = self.fields.clone();
         let token = self.token.clone();
         let listen_addr = self.listen_addr.clone();
         thread::spawn(move || {
             for stream in listener.incoming() {
                 let peer_table = peer_table.clone();
+                let entities = entities.clone();
+                let fields = fields.clone();
                 let tx = tx.clone();
 
                 thread::spawn(move || {
@@ -246,18 +254,39 @@ impl OmniscientService {
                         },
                         Ok(WriteEntityMsg(write_entity_msg)) => {
                             //TODO send write entity message event
-                            println!("write entity message for token {}", write_entity_msg.get_entity_token());
 
+                            //create entity hash map
                             let mut entity = HashMap::new();
                             for field in  write_entity_msg.get_fields().unwrap().iter() {
-                                entity.insert(field.get_key().unwrap(), field.get_value().unwrap());
+                                entity.insert(field.get_key().unwrap().to_string(), field.get_value().unwrap().to_string());
                             }
 
-                            //TODO add entity to entities map
+                            //insert entity into entities
+                            let mut entities = entities.write().unwrap();
+                            entities.insert(write_entity_msg.get_entity_token(), entity);
                         },
                         Ok(WriteFieldMsg(write_field_msg)) => {
                             //TODO send write field value message event
-                            println!("write field message for token {}", write_field_msg.get_entity_token());
+
+                            //get field_values HashMap<String,[]u64>
+                            let mut fields = fields.write().unwrap();
+                            let field = write_field_msg.get_field().unwrap();
+                            let fieldname = field.get_key().unwrap();
+                            
+                            if !fields.contains_key(&fieldname[..]) {
+                                fields.insert(fieldname.to_string(), HashMap::new());
+                            }
+                            
+                            let mut field_values = fields.get_mut(&fieldname[..]).unwrap();
+
+                            //add token for message
+                            let value = field.get_value().unwrap();
+                            if !field_values.contains_key(&value[..]) {
+                                field_values.insert(value.to_string(), LinkedList::new());
+                            }
+
+                            let mut entity_tokens = field_values.get_mut(&value[..]).unwrap();
+                            entity_tokens.push_back(write_field_msg.get_entity_token());
                         },
                         Ok(_) => panic!("Unknown message type"),
                         Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),

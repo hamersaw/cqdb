@@ -1,7 +1,7 @@
 extern crate capnp;
 
 use message_capnp;
-use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
+use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,QueryMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
 
 use event::Event;
 
@@ -183,6 +183,22 @@ impl OmniscientService {
 
                             //send event
                             tx.send(Event::PeerTableMsgEvent(map)).unwrap();
+                        },
+                        Ok(QueryMsg(query_msg)) => {
+                            //TODO send event
+                            
+                            //submit filter queries
+                            for filter in query_msg.get_filters().unwrap().iter() {
+                                //create query field message
+                                let mut msg_builder = capnp::message::Builder::new_default();
+                                {
+                                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                    let mut query_field_msg = msg.get_msg_type().init_query_field_msg();
+                                    query_field_msg.set_filter(filter).unwrap();
+                                }
+
+                                //TODO send messages to all peers
+                            }
                         },
                         Ok(RegisterTokenMsg(register_token_msg)) => {
                             let msg_socket_addr = register_token_msg.get_socket_addr().unwrap();

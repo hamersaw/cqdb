@@ -1,5 +1,16 @@
 @0xf25f36c02ae1cd9d;
 
+struct Field {
+	key @0 :Text;
+	value @1 :Text;
+}
+
+struct Filter {
+	fieldKey @0 :Text;
+	comparator @1 :Text;
+	value @2 :Text;
+}
+
 struct Message {
 	msgType :union {
 		addrMsg :group {
@@ -13,6 +24,15 @@ struct Message {
 		}
 		peerTableMsg :group {
 			peers @3 :List(PeerAddr);
+		}
+		queryMsg :group {
+			filters @13 :List(Filter);
+		}
+		queryEntityMsg :group {
+			entityToken @14 :UInt64;
+		}
+		queryFieldMsg :group {
+			filter @15 :Filter;
 		}
 		registerTokenMsg :group {
 			token @4 :UInt64;
@@ -32,11 +52,6 @@ struct Message {
 			field @12 :Field;
 		}
 	}
-}
-
-struct Field {
-	key @0 :Text;
-	value @1 :Text;
 }
 
 struct PeerAddr {

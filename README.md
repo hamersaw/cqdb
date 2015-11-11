@@ -44,7 +44,7 @@ node1 - token:33
 	entities:
 	fields:
 		first_name:
-			daniel -> 23,43
+			daniel -> 43,58
 		middle_name:
 			peter -> 43
 		last_name:
@@ -79,5 +79,7 @@ node3 - token:99
 
 ##TODO
 - send write entity/field events
+- figure out how to parse sql input - maybe a library?
+- use cjqed/rs-natural for fuzzy matching algorithms - already implemented, it's beautiful
 - add robustness to client error handling
 - need to allow bulk loading of values - don't create a connection for each insert

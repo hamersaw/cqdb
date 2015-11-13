@@ -99,11 +99,19 @@ fn main() {
                 {
                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                     let query_msg = msg.get_msg_type().init_query_msg();
-                    let mut filters = query_msg.init_filters(1);
-                    let mut filter = filters.borrow().get(0);
-                    filter.set_field_key("first_name");
-                    filter.set_comparator("equality");
-                    filter.set_value("daniel");
+                    let mut filters = query_msg.init_filters(2);
+                    {
+                        let mut filter = filters.borrow().get(0);
+                        filter.set_field_key("first_name");
+                        filter.set_comparator("equality");
+                        filter.set_value("daniel");
+                    }
+                    {
+                        let mut filter = filters.borrow().get(1);
+                        filter.set_field_key("last_name");
+                        filter.set_comparator("equality");
+                        filter.set_value("rammer");
+                    }
                 }
 
                 //send query message

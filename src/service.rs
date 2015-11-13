@@ -1,7 +1,7 @@
 extern crate capnp;
 
 use message_capnp;
-use message_capnp::message::msg_type::{InsertEntityMsg,EntityTokensMsg,LookupMsg,PeerTableMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
+use message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityTokensMsg,LookupMsg,PeerTableMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
 
 use event::Event;
 
@@ -199,16 +199,16 @@ impl OmniscientService {
                                     filter_tokens.clear();
                                 }
 
-                                //create query field message
-                                let mut msg_builder = capnp::message::Builder::new_default();
-                                {
-                                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                    let mut query_field_msg = msg.get_msg_type().init_query_field_msg();
-                                    query_field_msg.set_filter(filter).unwrap();
-                                }
-
                                 //send messages to all peers - TODO start a new thread for each request to improve speed - send simultaneous requests
                                 {
+                                    //create query field message
+                                    let mut msg_builder = capnp::message::Builder::new_default();
+                                    {
+                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                        let mut query_field_msg = msg.get_msg_type().init_query_field_msg();
+                                        query_field_msg.set_filter(filter).unwrap();
+                                    }
+
                                     let peer_table = peer_table.read().unwrap();
                                     for (_, peer_socket_addr) in peer_table.iter() {
                                         let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
@@ -256,15 +256,76 @@ impl OmniscientService {
                                 }
                             }
 
-                            //TODO send requests for each entity
+                            //create entities message
+                            /*let mut msg_builder = capnp::message::Builder::new_default();
+                            let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                            let entities_msg = msg.get_msg_type().init_entities_msg();
+                            let mut entities_msg_list = entities_msg.init_entities(entity_token_set.len() as u32);*/
+
+                            //TODO send requests for each entity - TODO send entity queries in separate threads to increase performance
                             for token in entity_token_set {
                                 println!("TODO return entity with key {}", token);
+                                //lookup token
+                                let peer_table = peer_table.read().unwrap();
+                                let socket_addr = match lookup(&peer_table, token) {
+                                    Some(socket_addr) => socket_addr,
+                                    None => panic!("Unable to find token in peer table"),
+                                };
+
+                                //create query entity message
+                                let mut msg_bldr = capnp::message::Builder::new_default();
+                                {
+                                    let msg = msg_bldr.init_root::<message_capnp::message::Builder>();
+                                    let mut query_entity_msg = msg.get_msg_type().init_query_entity_msg();
+                                    query_entity_msg.set_entity_token(token);
+                                }
+                                
+                                //send query entity message
+                                let mut stream = TcpStream::connect(socket_addr).unwrap();
+                                capnp::serialize::write_message(&mut stream, &msg_bldr).unwrap();
+
+                                //read entity tokens message
+                                let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                                let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                                //parse out message
+                                match msg.get_msg_type().which() {
+                                    Ok(EntityMsg(entity_msg)) => {
+                                        let fields = entity_msg.get_fields().unwrap();
+
+                                        for field in fields.iter() {
+                                            println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
+                                        }
+                                    },
+                                    Ok(_) => panic!("Unknown message type"),
+                                    Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                                }
                             }
                         },
                         Ok(QueryEntityMsg(query_entity_msg)) => {
                             //TODO send event
+                            
+                            //search for entity
+                            let entities = entities.read().unwrap();
+                            let entity_fields = entities.get(&query_entity_msg.get_entity_token()).unwrap();
 
-                            println!("recv query entity msg for entity {}", query_entity_msg.get_entity_token());
+                            //create entity message
+                            let mut msg_builder = capnp::message::Builder::new_default();
+                            {
+                                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                let entity_msg = msg.get_msg_type().init_entity_msg();
+                                let mut fields = entity_msg.init_fields(entity_fields.len() as u32);
+                                let mut count = 0;
+                                for (key, value) in entity_fields {
+                                    let mut field = fields.borrow().get(count);
+                                    field.set_key(key);
+                                    field.set_value(value);
+                                    count += 1;
+                                }
+                            }
+
+                            //send entity message
+                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                         },
                         Ok(QueryFieldMsg(query_field_msg)) => {
                             let filter = query_field_msg.get_filter().unwrap();
@@ -277,9 +338,10 @@ impl OmniscientService {
                             let field_value = filter.get_value().unwrap();
                             let mut entity_keys = HashSet::new();
 
-                            //TODO start adding comparators
                             if fields.contains_key(&fieldname[..]) {
                                 let field_values = fields.get(&fieldname[..]).unwrap();
+
+                                //match comparator type
                                 match filter.get_comparator().unwrap() {
                                     "equality" => {
                                         for (value, list) in field_values.iter() {

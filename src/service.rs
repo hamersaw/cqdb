@@ -1,11 +1,11 @@
 extern crate capnp;
 
 use message_capnp;
-use message_capnp::message::msg_type::{InsertEntityMsg,LookupMsg,PeerTableMsg,QueryMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
+use message_capnp::message::msg_type::{InsertEntityMsg,EntityTokensMsg,LookupMsg,PeerTableMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,RegisterTokenMsg,WriteEntityMsg,WriteFieldMsg};
 
 use event::Event;
 
-use std::collections::{BTreeMap,HashMap,LinkedList};
+use std::collections::{BTreeMap,HashMap,HashSet,LinkedList};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
@@ -187,8 +187,18 @@ impl OmniscientService {
                         Ok(QueryMsg(query_msg)) => {
                             //TODO send event
                             
+                            let filter_tokens: Arc<RwLock<HashSet<u64>>> = Arc::new(RwLock::new(HashSet::new()));
+                            let mut entity_token_set = HashSet::new();
+                            let mut first_iteration = true;
+
                             //submit filter queries
                             for filter in query_msg.get_filters().unwrap().iter() {
+                                //clear filter tokens
+                                {
+                                    let mut filter_tokens = filter_tokens.write().unwrap();
+                                    filter_tokens.clear();
+                                }
+
                                 //create query field message
                                 let mut msg_builder = capnp::message::Builder::new_default();
                                 {
@@ -197,8 +207,109 @@ impl OmniscientService {
                                     query_field_msg.set_filter(filter).unwrap();
                                 }
 
-                                //TODO send messages to all peers
+                                //send messages to all peers - TODO start a new thread for each request to improve speed - send simultaneous requests
+                                {
+                                    let peer_table = peer_table.read().unwrap();
+                                    for (_, peer_socket_addr) in peer_table.iter() {
+                                        let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
+                                        capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                                        //read entity tokens message
+                                        let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                                        let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                                        //parse out message
+                                        match msg.get_msg_type().which() {
+                                            Ok(EntityTokensMsg(entity_tokens_msg)) => {
+                                                //add to entity tokens list
+                                                let mut filter_tokens = filter_tokens.write().unwrap();
+                                                let entity_tokens = entity_tokens_msg.get_entity_tokens().unwrap();
+                                                println!("query filter found {} token(s)", entity_tokens.len());
+                                                for i in 0..entity_tokens.len() {
+                                                    filter_tokens.insert(entity_tokens.get(i));
+                                                }
+                                            },
+                                            Ok(_) => panic!("Unknown message type"),
+                                            Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                                        }
+                                    }
+                                }
+
+                                //update entity token set
+                                if first_iteration {
+                                    let filter_tokens = filter_tokens.read().unwrap();
+                                    for token in filter_tokens.iter() {
+                                        entity_token_set.insert(*token);
+                                    }
+                                    first_iteration = false;
+                                } else {
+                                    let filter_tokens = filter_tokens.read().unwrap();
+                                    let diff: HashSet<u64> = entity_token_set.difference(&filter_tokens).cloned().collect();
+                                    for token in diff {
+                                        entity_token_set.remove(&token);
+                                    }
+                                }
+
+                                //if no tokens then no need to loop through more filters
+                                if entity_token_set.is_empty() {
+                                    break;
+                                }
                             }
+
+                            //TODO send requests for each entity
+                            for token in entity_token_set {
+                                println!("TODO return entity with key {}", token);
+                            }
+                        },
+                        Ok(QueryEntityMsg(query_entity_msg)) => {
+                            //TODO send event
+
+                            println!("recv query entity msg for entity {}", query_entity_msg.get_entity_token());
+                        },
+                        Ok(QueryFieldMsg(query_field_msg)) => {
+                            let filter = query_field_msg.get_filter().unwrap();
+                            //println!("recv query_field_msg with comparator:{} field_key:{} value:{}", filter.get_comparator().unwrap(), filter.get_field_key().unwrap(), filter.get_value().unwrap());
+                            //TODO send event
+
+                            //execute matching to fields
+                            let fields = fields.read().unwrap();
+                            let fieldname = filter.get_field_key().unwrap();
+                            let field_value = filter.get_value().unwrap();
+                            let mut entity_keys = HashSet::new();
+
+                            //TODO start adding comparators
+                            if fields.contains_key(&fieldname[..]) {
+                                let field_values = fields.get(&fieldname[..]).unwrap();
+                                match filter.get_comparator().unwrap() {
+                                    "equality" => {
+                                        for (value, list) in field_values.iter() {
+                                            if value == field_value {
+                                                for key in list {
+                                                    entity_keys.insert(key);
+                                                }
+                                            }
+                                        }
+                                    },
+                                    _ => panic!("Unknown comparator type {}", filter.get_comparator().unwrap()),
+                                }
+                            }
+                            
+                            //create entity tokens
+                            let mut msg_builder = capnp::message::Builder::new_default();
+                            {
+                                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                let entity_tokens_msg = msg.get_msg_type().init_entity_tokens_msg();
+                                let mut entity_tokens = entity_tokens_msg.init_entity_tokens(entity_keys.len() as u32);
+
+                                let mut count = 0;
+                                for token in entity_keys {
+                                    entity_tokens.set(count, *token);
+                                    count+=1;
+                                }
+                            }
+
+                            //send entity tokens message
+                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                         },
                         Ok(RegisterTokenMsg(register_token_msg)) => {
                             let msg_socket_addr = register_token_msg.get_socket_addr().unwrap();

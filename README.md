@@ -78,8 +78,9 @@ node3 - token:99
 - craig -> hash -> 83
 
 ##TODO
-- send write entity/field events
-- figure out how to parse sql input - maybe a library?
+- start a new thread for each query field message sent - improves performance over iteratively sending to peers
+- implement a bunch of "comparators" (maybe change the name, it sucks) - use fuzzy matching algorithsm below
 - use cjqed/rs-natural for fuzzy matching algorithms - already implemented, it's beautiful
-- add robustness to client error handling
+- figure out how to parse sql input - maybe a library?
 - need to allow bulk loading of values - don't create a connection for each insert
+- error handling could use all kinds of work - everywhere

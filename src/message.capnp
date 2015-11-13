@@ -16,6 +16,9 @@ struct Message {
 		addrMsg :group {
 			socketAddr @0 :SocketAddr;
 		}
+		entityTokensMsg :group {
+			entityTokens @16 :List(UInt64);
+		}
 		insertEntityMsg :group {
 			fields @1 :List(Field);
 		}

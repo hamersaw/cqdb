@@ -77,7 +77,7 @@ fn main() {
                         for i in 0..header.len() {
                             let mut field = fields.borrow().get(i as u32);                            
                             field.set_key(&header[i][..]);
-                            field.set_value(&record[i][..]);
+                            field.set_value(&record[i].to_lowercase()[..]);
                         }
                     }
 
@@ -92,6 +92,23 @@ fn main() {
             },
             "query" => {
                 println!("TODO process query with db at {}", host_addr);
+                //TODO read in user input and parse query for filters
+
+                //create query message
+                let mut msg_builder = capnp::message::Builder::new_default();
+                {
+                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                    let query_msg = msg.get_msg_type().init_query_msg();
+                    let mut filters = query_msg.init_filters(1);
+                    let mut filter = filters.borrow().get(0);
+                    filter.set_field_key("first_name");
+                    filter.set_comparator("equality");
+                    filter.set_value("daniel");
+                }
+
+                //send query message
+                let mut stream = TcpStream::connect(host_addr).unwrap();
+                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
             },
             "help" => {
                 println!("\tload_file <filename> => load csv file into cluster");

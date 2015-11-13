@@ -1,5 +1,9 @@
 @0xf25f36c02ae1cd9d;
 
+struct Entity {
+	fields @0 :List(Field);
+}
+
 struct Field {
 	key @0 :Text;
 	value @1 :Text;
@@ -17,7 +21,7 @@ struct Message {
 			socketAddr @0 :SocketAddr;
 		}
 		entitiesMsg :group {
-			entities @18 :List(List(Field));
+			entities @18 :List(Entity);
 		}
 		entityMsg :group {
 			fields @17 :List(Field);

@@ -7,7 +7,7 @@ extern crate capnp;
 
 extern crate cqdb;
 use cqdb::message_capnp;
-//use cqdb::message_capnp::message::msg_type::{InsertEntityMsg};
+use cqdb::message_capnp::message::msg_type::{EntitiesMsg};
 
 use std::io;
 use std::io::prelude::*; //needed for flushing stdout
@@ -117,6 +117,28 @@ fn main() {
                 //send query message
                 let mut stream = TcpStream::connect(host_addr).unwrap();
                 capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                //read entities tokens message
+                let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                //parse out message
+                match msg.get_msg_type().which() {
+                    Ok(EntitiesMsg(entities_msg)) => {
+                        //loop through result entities
+                        let entities = entities_msg.get_entities().unwrap();
+                        for entity in entities.iter() {
+                            println!("Entity");
+
+                            let fields = entity.get_fields().unwrap();
+                            for field in fields.iter() {
+                                println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
+                            }
+                        }
+                    },
+                    Ok(_) => panic!("Unknown message type"),
+                    Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                }
             },
             "help" => {
                 println!("\tload_file <filename> => load csv file into cluster");

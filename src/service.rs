@@ -257,50 +257,60 @@ impl OmniscientService {
                             }
 
                             //create entities message
-                            /*let mut msg_builder = capnp::message::Builder::new_default();
-                            let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                            let entities_msg = msg.get_msg_type().init_entities_msg();
-                            let mut entities_msg_list = entities_msg.init_entities(entity_token_set.len() as u32);*/
+                            let mut msg_builder = capnp::message::Builder::new_default();
+                            {
+                                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                let entities_msg = msg.get_msg_type().init_entities_msg();
+                                let mut entities_msg_list = entities_msg.init_entities(entity_token_set.len() as u32);
 
-                            //TODO send requests for each entity - TODO send entity queries in separate threads to increase performance
-                            for token in entity_token_set {
-                                println!("TODO return entity with key {}", token);
-                                //lookup token
-                                let peer_table = peer_table.read().unwrap();
-                                let socket_addr = match lookup(&peer_table, token) {
-                                    Some(socket_addr) => socket_addr,
-                                    None => panic!("Unable to find token in peer table"),
-                                };
+                                //send requests for each entity - TODO spawn a separate thread for each to improve performance
+                                let mut count = 0;
+                                for token in entity_token_set {
+                                    println!("TODO return entity with key {}", token);
+                                    //lookup token
+                                    let peer_table = peer_table.read().unwrap();
+                                    let socket_addr = match lookup(&peer_table, token) {
+                                        Some(socket_addr) => socket_addr,
+                                        None => panic!("Unable to find token in peer table"),
+                                    };
 
-                                //create query entity message
-                                let mut msg_bldr = capnp::message::Builder::new_default();
-                                {
-                                    let msg = msg_bldr.init_root::<message_capnp::message::Builder>();
-                                    let mut query_entity_msg = msg.get_msg_type().init_query_entity_msg();
-                                    query_entity_msg.set_entity_token(token);
-                                }
+                                    //create query entity message
+                                    let mut msg_bldr = capnp::message::Builder::new_default();
+                                    {
+                                        let msg = msg_bldr.init_root::<message_capnp::message::Builder>();
+                                        let mut query_entity_msg = msg.get_msg_type().init_query_entity_msg();
+                                        query_entity_msg.set_entity_token(token);
+                                    }
                                 
-                                //send query entity message
-                                let mut stream = TcpStream::connect(socket_addr).unwrap();
-                                capnp::serialize::write_message(&mut stream, &msg_bldr).unwrap();
+                                    //send query entity message
+                                    let mut stream = TcpStream::connect(socket_addr).unwrap();
+                                    capnp::serialize::write_message(&mut stream, &msg_bldr).unwrap();
 
-                                //read entity tokens message
-                                let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
-                                let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+                                    //read entity tokens message
+                                    let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                                    let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
 
-                                //parse out message
-                                match msg.get_msg_type().which() {
-                                    Ok(EntityMsg(entity_msg)) => {
-                                        let fields = entity_msg.get_fields().unwrap();
+                                    //parse out message
+                                    match msg.get_msg_type().which() {
+                                        Ok(EntityMsg(entity_msg)) => {
+                                            let fields = entity_msg.get_fields().unwrap();
+                                            let mut entity = entities_msg_list.borrow().get(count);
+                                            entity.set_fields(fields).unwrap();
 
-                                        for field in fields.iter() {
-                                            println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
-                                        }
-                                    },
-                                    Ok(_) => panic!("Unknown message type"),
-                                    Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                                            for field in fields.iter() {
+                                                println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
+                                            }
+                                        },
+                                        Ok(_) => panic!("Unknown message type"),
+                                        Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                                    }
+
+                                    count += 1;
                                 }
                             }
+
+                            //send entities message
+                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                         },
                         Ok(QueryEntityMsg(query_entity_msg)) => {
                             //TODO send event

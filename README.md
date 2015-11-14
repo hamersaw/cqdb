@@ -79,8 +79,10 @@ node3 - token:99
 - craig -> hash -> 83
 
 ##TODO
+- transfer to using rustp2p omnscient framework - going to make the code much cleaner
+
 - use Entity struct in message passing
-- remove all the Event stuff - i don't think crust had that right
+- remove all the Event stuff - i don't think the crust developers had that right
 
 - start a new thread for each query field message sent - improves performance over iteratively sending to peers
 - implement a bunch of "comparators" (maybe change the name, it sucks) - use fuzzy matching algorithsm below

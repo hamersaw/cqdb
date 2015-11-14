@@ -17,63 +17,34 @@ struct Filter {
 
 struct Message {
 	msgType :union {
-		addrMsg :group {
-			socketAddr @0 :SocketAddr;
-		}
 		entitiesMsg :group {
-			entities @18 :List(Entity);
+			entities @0 :List(Entity);
 		}
 		entityMsg :group {
-			fields @17 :List(Field);
-		}
-		entityTokensMsg :group {
-			entityTokens @16 :List(UInt64);
-		}
-		insertEntityMsg :group {
 			fields @1 :List(Field);
 		}
-		lookupMsg :group {
-			token @2 :UInt64;
+		entityTokensMsg :group {
+			entityTokens @2 :List(UInt64);
 		}
-		peerTableMsg :group {
-			peers @3 :List(PeerAddr);
+		insertEntityMsg :group {
+			fields @3 :List(Field);
 		}
 		queryMsg :group {
-			filters @13 :List(Filter);
+			filters @4 :List(Filter);
 		}
 		queryEntityMsg :group {
-			entityToken @14 :UInt64;
+			entityToken @5 :UInt64;
 		}
 		queryFieldMsg :group {
-			filter @15 :Filter;
-		}
-		registerTokenMsg :group {
-			token @4 :UInt64;
-			socketAddr @5 :SocketAddr;
-			joinInd @6 :Bool;
-		}
-		resultMsg :group {
-			success @7 :Bool;
-			errMsg @8 :Text;
+			filter @6 :Filter;
 		}
 		writeEntityMsg :group {
-			entityToken @9 :UInt64;
-			fields @10 :List(Field);
+			entityToken @7 :UInt64;
+			fields @8 :List(Field);
 		}
 		writeFieldMsg: group {
-			entityToken @11 :UInt64;
-			field @12 :Field;
+			entityToken @9 :UInt64;
+			field @10 :Field;
 		}
 	}
-}
-
-struct PeerAddr {
-	token @0 :UInt64;
-	ip @1 :Text;
-	port @2 :UInt16;
-}
-
-struct SocketAddr {
-	ip @0 :Text;
-	port @1 :UInt16;
 }

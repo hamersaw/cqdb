@@ -5,13 +5,13 @@ struct Entity {
 }
 
 struct Field {
-	key @0 :Text;
+	name @0 :Text;
 	value @1 :Text;
 }
 
 struct Filter {
-	fieldKey @0 :Text;
-	comparator @1 :Text;
+	fieldName @0 :Text;
+	type @1 :Text;
 	value @2 :Text;
 }
 
@@ -23,8 +23,8 @@ struct Message {
 		entityMsg :group {
 			fields @1 :List(Field);
 		}
-		entityTokensMsg :group {
-			entityTokens @2 :List(UInt64);
+		entityKeysMsg :group {
+			entityKeys @2 :List(UInt64);
 		}
 		insertEntityMsg :group {
 			fields @3 :List(Field);
@@ -33,17 +33,17 @@ struct Message {
 			filters @4 :List(Filter);
 		}
 		queryEntityMsg :group {
-			entityToken @5 :UInt64;
+			entityKey @5 :UInt64;
 		}
 		queryFieldMsg :group {
 			filter @6 :Filter;
 		}
 		writeEntityMsg :group {
-			entityToken @7 :UInt64;
+			entityKey @7 :UInt64;
 			fields @8 :List(Field);
 		}
 		writeFieldMsg: group {
-			entityToken @9 :UInt64;
+			entityKey @9 :UInt64;
 			field @10 :Field;
 		}
 	}

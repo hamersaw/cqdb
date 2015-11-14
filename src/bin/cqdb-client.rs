@@ -76,7 +76,7 @@ fn main() {
                         let mut fields = insert_entity_msg.init_fields(header.len() as u32);
                         for i in 0..header.len() {
                             let mut field = fields.borrow().get(i as u32);                            
-                            field.set_key(&header[i][..]);
+                            field.set_name(&header[i][..]);
                             field.set_value(&record[i].to_lowercase()[..]);
                         }
                     }
@@ -102,14 +102,14 @@ fn main() {
                     let mut filters = query_msg.init_filters(1);
                     {
                         let mut filter = filters.borrow().get(0);
-                        filter.set_field_key("first_name");
-                        filter.set_comparator("equality");
+                        filter.set_field_name("first_name");
+                        filter.set_type("equality");
                         filter.set_value("daniel");
                     }
                     /*{
                         let mut filter = filters.borrow().get(1);
                         filter.set_field_key("last_name");
-                        filter.set_comparator("equality");
+                        filter.set_type("equality");
                         filter.set_value("rammer");
                     }*/
                 }
@@ -132,7 +132,7 @@ fn main() {
 
                             let fields = entity.get_fields().unwrap();
                             for field in fields.iter() {
-                                println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
+                                println!("{}: {}", field.get_name().unwrap(), field.get_value().unwrap());
                             }
                         }
                     },

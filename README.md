@@ -3,7 +3,7 @@
 ##Overview
 A distributed database for fuzzy matching entities.
 
-##Execution Examples
+##Examples
 ####Server
 ```bash
 ./cqdb-server -i coeus -t 0 -l 127.0.0.1 -a 15605 -p 15705
@@ -79,11 +79,9 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
-- use Entity struct in message passing
 - factor some code out of cqdb-server.rs - reuseable code into the libaray (ie query.rs ...)
 - start a new thread for each query field message sent - improves performance over iteratively sending to peers
-- implement a bunch of "comparators" (maybe change the name, it sucks) - use fuzzy matching algorithsm below
-- use cjqed/rs-natural for fuzzy matching algorithms - already implemented, it's beautiful
+- implement more filter types (metaphone, ngram, etc..) - use cjqed/rs-natural fuzzy matching algorithms
 - figure out how to parse sql input - maybe a library?
 - need to allow bulk loading of values - don't create a connection for each insert
 - error handling could use all kinds of work - everywhere

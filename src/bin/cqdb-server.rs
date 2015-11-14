@@ -5,7 +5,7 @@ extern crate capnp;
 
 extern crate cqdb;
 use cqdb::message_capnp;
-use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityTokensMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,WriteEntityMsg,WriteFieldMsg};
+use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,WriteEntityMsg,WriteFieldMsg};
 
 extern crate rustp2p;
 use rustp2p::omniscient::event::Event;
@@ -83,27 +83,22 @@ pub fn main() {
                 match msg.get_msg_type().which() {
                     Ok(InsertEntityMsg(insert_entity_msg)) => {
                         //compute hash over all fields
-                        let mut concat_string = String::new();
-                        for field in insert_entity_msg.get_fields().unwrap().iter() {
-                            concat_string = concat_string + field.get_value().unwrap();
-                        }
                         let mut hasher = SipHasher::new();
-                        concat_string.hash(&mut hasher);
-                        let entity_token = hasher.finish();
+                        for field in insert_entity_msg.get_fields().unwrap().iter() {
+                            field.get_value().unwrap().hash(&mut hasher);
+                        }
+                        let entity_key = hasher.finish();
 
                         //lookup into peer table
                         let lookup_table = lookup_table.read().unwrap();
-                        let socket_addr = match rustp2p::omniscient::service::lookup(&lookup_table, entity_token) {
-                            Some(socket_addr) => socket_addr,
-                            None => panic!("error in looking up token in the peer table"),
-                        };
+                        let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, entity_key).unwrap();
 
                         //create write entity message
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                             let mut write_entity_msg = msg.get_msg_type().init_write_entity_msg();
-                            write_entity_msg.set_entity_token(entity_token);
+                            write_entity_msg.set_entity_key(entity_key);
                             write_entity_msg.set_fields(insert_entity_msg.get_fields().unwrap()).unwrap();
                         }
 
@@ -119,17 +114,14 @@ pub fn main() {
                             let field_token = hasher.finish();
 
                             //lookup into peer table
-                            let socket_addr = match rustp2p::omniscient::service::lookup(&lookup_table, field_token) {
-                                Some(socket_addr) => socket_addr,
-                                None => panic!("error in looking up token in the peer table"),
-                            };
+                            let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, field_token).unwrap();
 
                             //create write field message
                             let mut msg_builder = capnp::message::Builder::new_default();
                             {
                                 let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                                 let mut write_field_msg = msg.get_msg_type().init_write_field_msg();
-                                write_field_msg.set_entity_token(entity_token);
+                                write_field_msg.set_entity_key(entity_key);
                                 write_field_msg.set_field(field).unwrap();
                             }
 
@@ -139,16 +131,16 @@ pub fn main() {
                         }
                     },
                     Ok(QueryMsg(query_msg)) => {
-                        let filter_tokens: Arc<RwLock<HashSet<u64>>> = Arc::new(RwLock::new(HashSet::new()));
-                        let mut entity_token_set = HashSet::new();
+                        let filter_keyset: Arc<RwLock<HashSet<u64>>> = Arc::new(RwLock::new(HashSet::new()));
+                        let mut entity_keyset = HashSet::new();
                         let mut first_iteration = true;
 
                         //submit filter queries
                         for filter in query_msg.get_filters().unwrap().iter() {
-                            //clear filter tokens
+                            //clear filter keyset
                             {
-                                let mut filter_tokens = filter_tokens.write().unwrap();
-                                filter_tokens.clear();
+                                let mut filter_keyset = filter_keyset.write().unwrap();
+                                filter_keyset.clear();
                             }
 
                             //send messages to all peers - TODO start a new thread for each request to improve speed - send simultaneous requests
@@ -172,13 +164,12 @@ pub fn main() {
 
                                     //parse out message
                                     match msg.get_msg_type().which() {
-                                        Ok(EntityTokensMsg(entity_tokens_msg)) => {
+                                        Ok(EntityKeysMsg(entity_keys_msg)) => {
                                             //add to entity tokens list
-                                            let mut filter_tokens = filter_tokens.write().unwrap();
-                                            let entity_tokens = entity_tokens_msg.get_entity_tokens().unwrap();
-                                            println!("query filter found {} token(s)", entity_tokens.len());
-                                            for i in 0..entity_tokens.len() {
-                                                filter_tokens.insert(entity_tokens.get(i));
+                                            let mut filter_keyset = filter_keyset.write().unwrap();
+                                            let entity_keys = entity_keys_msg.get_entity_keys().unwrap();
+                                            for i in 0..entity_keys.len() {
+                                                filter_keyset.insert(entity_keys.get(i));
                                             }
                                         },
                                         Ok(_) => panic!("Unknown message type"),
@@ -189,21 +180,21 @@ pub fn main() {
 
                             //update entity token set
                             if first_iteration {
-                                let filter_tokens = filter_tokens.read().unwrap();
-                                for token in filter_tokens.iter() {
-                                    entity_token_set.insert(*token);
+                                let filter_keyset = filter_keyset.read().unwrap();
+                                for entity_key in filter_keyset.iter() {
+                                    entity_keyset.insert(*entity_key);
                                 }
                                 first_iteration = false;
                             } else {
-                                let filter_tokens = filter_tokens.read().unwrap();
-                                let diff: HashSet<u64> = entity_token_set.difference(&filter_tokens).cloned().collect();
-                                for token in diff {
-                                    entity_token_set.remove(&token);
+                                let filter_keyset = filter_keyset.read().unwrap();
+                                let diff_keyset: HashSet<u64> = entity_keyset.difference(&filter_keyset).cloned().collect();
+                                for entity_key in diff_keyset {
+                                    entity_keyset.remove(&entity_key);
                                 }
                             }
 
                             //if no tokens then no need to loop through more filters
-                            if entity_token_set.is_empty() {
+                            if entity_keyset.is_empty() {
                                 break;
                             }
                         }
@@ -213,32 +204,28 @@ pub fn main() {
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                             let entities_msg = msg.get_msg_type().init_entities_msg();
-                            let mut entities_msg_list = entities_msg.init_entities(entity_token_set.len() as u32);
+                            let mut entities_msg_list = entities_msg.init_entities(entity_keyset.len() as u32);
 
                             //send requests for each entity - TODO spawn a separate thread for each to improve performance
-                            let mut count = 0;
-                            for token in entity_token_set {
-                                println!("TODO return entity with key {}", token);
-                                //lookup token
+                            let mut index = 0;
+                            for entity_key in entity_keyset {
+                                //lookup key
                                 let lookup_table = lookup_table.read().unwrap();
-                                let socket_addr = match rustp2p::omniscient::service::lookup(&lookup_table, token) {
-                                    Some(socket_addr) => socket_addr,
-                                    None => panic!("Unable to find token in peer table"),
-                                };
+                                let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, entity_key).unwrap();
 
                                 //create query entity message
                                 let mut msg_bldr = capnp::message::Builder::new_default();
                                 {
                                     let msg = msg_bldr.init_root::<message_capnp::message::Builder>();
                                     let mut query_entity_msg = msg.get_msg_type().init_query_entity_msg();
-                                    query_entity_msg.set_entity_token(token);
+                                    query_entity_msg.set_entity_key(entity_key);
                                 }
                             
                                 //send query entity message
                                 let mut stream = TcpStream::connect(socket_addr).unwrap();
                                 capnp::serialize::write_message(&mut stream, &msg_bldr).unwrap();
 
-                                //read entity tokens message
+                                //read entity keys message
                                 let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
                                 let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
 
@@ -246,18 +233,14 @@ pub fn main() {
                                 match msg.get_msg_type().which() {
                                     Ok(EntityMsg(entity_msg)) => {
                                         let fields = entity_msg.get_fields().unwrap();
-                                        let mut entity = entities_msg_list.borrow().get(count);
+                                        let mut entity = entities_msg_list.borrow().get(index);
                                         entity.set_fields(fields).unwrap();
-
-                                        for field in fields.iter() {
-                                            println!("{}: {}", field.get_key().unwrap(), field.get_value().unwrap());
-                                        }
                                     },
                                     Ok(_) => panic!("Unknown message type"),
                                     Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
                                 }
 
-                                count += 1;
+                                index += 1;
                             }
                         }
 
@@ -267,7 +250,7 @@ pub fn main() {
                     Ok(QueryEntityMsg(query_entity_msg)) => {
                         //search for entity
                         let entities = entities.read().unwrap();
-                        let entity_fields = entities.get(&query_entity_msg.get_entity_token()).unwrap();
+                        let entity_fields = entities.get(&query_entity_msg.get_entity_key()).unwrap();
 
                         //create entity message
                         let mut msg_builder = capnp::message::Builder::new_default();
@@ -275,12 +258,12 @@ pub fn main() {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                             let entity_msg = msg.get_msg_type().init_entity_msg();
                             let mut fields = entity_msg.init_fields(entity_fields.len() as u32);
-                            let mut count = 0;
-                            for (key, value) in entity_fields {
-                                let mut field = fields.borrow().get(count);
-                                field.set_key(key);
+                            let mut index = 0;
+                            for (name, value) in entity_fields {
+                                let mut field = fields.borrow().get(index);
+                                field.set_name(name);
                                 field.set_value(value);
-                                count += 1;
+                                index += 1;
                             }
                         }
 
@@ -290,63 +273,43 @@ pub fn main() {
                     Ok(QueryFieldMsg(query_field_msg)) => {
                         let filter = query_field_msg.get_filter().unwrap();
 
-                        //execute matching to fields
+                        //match field value
                         let fields = fields.read().unwrap();
-                        let fieldname = filter.get_field_key().unwrap();
-                        let field_value = filter.get_value().unwrap();
-                        let mut entity_keys = HashSet::new();
+                        let entity_keys = cqdb::query::query_field(filter.get_type().unwrap(), filter.get_field_name().unwrap(), filter.get_value().unwrap(), &fields);
 
-                        if fields.contains_key(&fieldname[..]) {
-                            let field_values = fields.get(&fieldname[..]).unwrap();
-
-                            //match comparator type
-                            match filter.get_comparator().unwrap() {
-                                "equality" => {
-                                    for (value, list) in field_values.iter() {
-                                        if value == field_value {
-                                            for key in list {
-                                                entity_keys.insert(key);
-                                            }
-                                        }
-                                    }
-                                },
-                                _ => panic!("Unknown comparator type {}", filter.get_comparator().unwrap()),
-                            }
-                        }
-                        
-                        //create entity tokens
+                        //create entity keys message
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                            let entity_tokens_msg = msg.get_msg_type().init_entity_tokens_msg();
-                            let mut entity_tokens = entity_tokens_msg.init_entity_tokens(entity_keys.len() as u32);
+                            let entity_keys_msg = msg.get_msg_type().init_entity_keys_msg();
+                            let mut keys = entity_keys_msg.init_entity_keys(entity_keys.len() as u32);
 
                             let mut count = 0;
-                            for token in entity_keys {
-                                entity_tokens.set(count, *token);
+                            for entity_key in entity_keys {
+                                keys.set(count, entity_key);
                                 count+=1;
                             }
                         }
 
-                        //send entity tokens message
+                        //send entity keys message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                     },
                     Ok(WriteEntityMsg(write_entity_msg)) => {
                         //create entity hash map
                         let mut entity = HashMap::new();
                         for field in  write_entity_msg.get_fields().unwrap().iter() {
-                            entity.insert(field.get_key().unwrap().to_string(), field.get_value().unwrap().to_string());
+                            entity.insert(field.get_name().unwrap().to_string(), field.get_value().unwrap().to_string());
                         }
 
                         //insert entity into entities
                         let mut entities = entities.write().unwrap();
-                        entities.insert(write_entity_msg.get_entity_token(), entity);
+                        entities.insert(write_entity_msg.get_entity_key(), entity);
                     },
                     Ok(WriteFieldMsg(write_field_msg)) => {
                         //get field_values HashMap<String,[]u64>
                         let mut fields = fields.write().unwrap();
                         let field = write_field_msg.get_field().unwrap();
-                        let fieldname = field.get_key().unwrap();
+                        let fieldname = field.get_name().unwrap();
                         
                         if !fields.contains_key(&fieldname[..]) {
                             fields.insert(fieldname.to_string(), HashMap::new());
@@ -354,14 +317,14 @@ pub fn main() {
                         
                         let mut field_values = fields.get_mut(&fieldname[..]).unwrap();
 
-                        //add token for message
+                        //add key for message
                         let value = field.get_value().unwrap();
                         if !field_values.contains_key(&value[..]) {
                             field_values.insert(value.to_string(), LinkedList::new());
                         }
 
                         let mut entity_tokens = field_values.get_mut(&value[..]).unwrap();
-                        entity_tokens.push_back(write_field_msg.get_entity_token());
+                        entity_tokens.push_back(write_field_msg.get_entity_key());
                     },
                     Ok(_) => panic!("Unknown message type"),
                     Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),

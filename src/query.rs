@@ -1,3 +1,5 @@
+extern crate ruzzy;
+
 use std::collections::{HashMap,HashSet,LinkedList};
 
 pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, fields: &HashMap<String,HashMap<String,LinkedList<u64>>>) -> HashSet<u64> {
@@ -10,6 +12,33 @@ pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, field
             "equality" => {
                 for (value, entity_key_list) in field_values.iter() {
                     if value == field_value {
+                        for entity_key in entity_key_list {
+                            entity_keys.insert(*entity_key);
+                        }
+                    }
+                }
+            },
+            "levenshtein" => {
+                for (value, entity_key_list) in field_values.iter() {
+                    if ruzzy::levenshtein::levenshtein(value, field_value) <= 2 {
+                        for entity_key in entity_key_list {
+                            entity_keys.insert(*entity_key);
+                        }
+                    }
+                }
+            },
+            "ngram" => {
+                for (value, entity_key_list) in field_values.iter() {
+                    if ruzzy::ngram::ngram(value, field_value, 3) >= 0.85 {
+                        for entity_key in entity_key_list {
+                            entity_keys.insert(*entity_key);
+                        }
+                    }
+                }
+            },
+            "soundex" => {
+                for (value, entity_key_list) in field_values.iter() {
+                    if ruzzy::soundex::soundex(value, field_value) {
                         for entity_key in entity_key_list {
                             entity_keys.insert(*entity_key);
                         }

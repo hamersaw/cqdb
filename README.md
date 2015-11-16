@@ -79,9 +79,7 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
-- factor some code out of cqdb-server.rs - reuseable code into the libaray (ie query.rs ...)
 - start a new thread for each query field message sent - improves performance over iteratively sending to peers
-- implement more filter types (metaphone, ngram, etc..) - use cjqed/rs-natural fuzzy matching algorithms
-- figure out how to parse sql input - maybe a library?
+- figure out how to parse sql input - ptal/oak rust-peg
 - need to allow bulk loading of values - don't create a connection for each insert
 - error handling could use all kinds of work - everywhere

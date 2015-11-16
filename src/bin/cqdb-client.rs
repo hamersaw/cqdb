@@ -103,14 +103,14 @@ fn main() {
                     {
                         let mut filter = filters.borrow().get(0);
                         filter.set_field_name("first_name");
-                        filter.set_type("equality");
-                        filter.set_value("daniel");
+                        filter.set_type("soundex");
+                        filter.set_value("doniel");
                     }
                     /*{
                         let mut filter = filters.borrow().get(1);
-                        filter.set_field_key("last_name");
-                        filter.set_type("equality");
-                        filter.set_value("rammer");
+                        filter.set_field_name("last_name");
+                        filter.set_type("ngram");
+                        filter.set_value("rammor");
                     }*/
                 }
 

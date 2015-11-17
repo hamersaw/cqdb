@@ -8,6 +8,9 @@ extern crate capnp;
 extern crate cqdb;
 use cqdb::message_capnp;
 use cqdb::message_capnp::message::msg_type::{EntitiesMsg};
+use cqdb::parser::Command::{Help,Load,Query};
+
+extern crate nom;
 
 use std::io;
 use std::io::prelude::*; //needed for flushing stdout
@@ -42,25 +45,45 @@ fn main() {
 
         line.clear();
         stdin.read_line(&mut line).ok();
-        let str_vec: Vec<&str> = line.trim().split(' ').collect();
+        line = line.trim().to_string();
 
         //parse command
-        match str_vec[0] {
-            "load_file" => {
-                if str_vec.len() != 2 {
-                    println!("load_file command requires exaclty 1 argument. {} were given.", str_vec.len() - 1);
-                    continue;
+        let cmd = match cqdb::parser::cmd(&line.clone().into_bytes()[..]) {
+            nom::IResult::Done(bytes, query) => {
+                if bytes.len() != 0 {
+                    Help
+                } else {
+                    query
                 }
+            },
+            _ => {
+                println!("Invalid input command");
+                Help
+            },
+        };
 
+        //execute command
+        match cmd {
+            Help => {
+                println!("\tLOAD <filename> => load csv file into cluster");
+                println!("\tSELECT [ * | <field> ( , <field> )* ] WHERE <field> ~<type> <value> (AND <field> ~<type> <value>)* => perfrom query on cluster");
+                println!("\tHELP => print this menu");
+            },
+            Load(file_name) => {
                 //parse out filename
-                let path = Path::new(str_vec[1]);
+                /*let path = Path::new(&file_name[..]);
                 let filename = match path.file_name().unwrap().to_str() {
                     Some(filename) => filename,
                     None => panic!("invalid filename"),
-                };
+                };*/
 
                 //open csv file reader and read header
-                let mut reader = csv::Reader::from_file(str_vec[1]).unwrap();
+                let reader = csv::Reader::from_file(file_name.clone());
+                if !reader.is_ok() {
+                    println!("file '{}' does not exist or cannot be opened", file_name);
+                    continue;
+                }
+                let mut reader = reader.unwrap();
                 let header = reader.headers().unwrap();
 
                 //read records
@@ -88,30 +111,24 @@ fn main() {
                     record_count += 1;
                 }
 
-                println!("\t{}: {} records", filename, record_count);
-            },
-            "query" => {
-                println!("TODO process query with db at {}", host_addr);
-                //TODO read in user input and parse query for filters
+                println!("\t{}: {} records", file_name, record_count);
 
+            },
+            Query(field_names, filters) => {
                 //create query message
                 let mut msg_builder = capnp::message::Builder::new_default();
                 {
                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                     let query_msg = msg.get_msg_type().init_query_msg();
-                    let mut filters = query_msg.init_filters(1);
-                    {
-                        let mut filter = filters.borrow().get(0);
-                        filter.set_field_name("first_name");
-                        filter.set_type("soundex");
-                        filter.set_value("doniel");
+                    let mut query_filters = query_msg.init_filters(filters.len() as u32);
+                    let mut idx = 0;
+                    for filter in filters {
+                        let mut query_filter = query_filters.borrow().get(idx);
+                        query_filter.set_field_name(&filter.field_name[..]);
+                        query_filter.set_type(&filter.filter_type[..]);
+                        query_filter.set_value(&filter.value[..]);
+                        idx += 1;
                     }
-                    /*{
-                        let mut filter = filters.borrow().get(1);
-                        filter.set_field_name("last_name");
-                        filter.set_type("ngram");
-                        filter.set_value("rammor");
-                    }*/
                 }
 
                 //send query message
@@ -132,6 +149,7 @@ fn main() {
 
                             let fields = entity.get_fields().unwrap();
                             for field in fields.iter() {
+                                //TODO only print off it it's in field_names
                                 println!("{}: {}", field.get_name().unwrap(), field.get_value().unwrap());
                             }
                         }
@@ -140,14 +158,6 @@ fn main() {
                     Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
                 }
             },
-            "help" => {
-                println!("\tload_file <filename> => load csv file into cluster");
-                println!("\tquery <query>        => execute query on cluster");
-                println!("\thelp                 => print this menu");
-                println!("\tquit                 => exit the program");
-            },
-            "quit" => break,
-            _ => println!("Unknown command '{}' issue command 'help' for command usage", str_vec[0]),
         }
     }
 }

@@ -79,7 +79,8 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
+- clean up parsing code - need to be able to parse '_' as part of field names - public struct of filter? - storing everything as String instead of &str
+- pass arguments to the filter types (edit distance count, ngram min score, etc..)
 - start a new thread for each query field message sent - improves performance over iteratively sending to peers
-- figure out how to parse sql input - ptal/oak rust-peg
 - need to allow bulk loading of values - don't create a connection for each insert
 - error handling could use all kinds of work - everywhere

@@ -8,14 +8,13 @@ extern crate capnp;
 extern crate cqdb;
 use cqdb::message_capnp;
 use cqdb::message_capnp::message::msg_type::{EntitiesMsg};
-use cqdb::parser::Command::{Help,Load,Query};
+use cqdb::parser::Command::{Exit,Help,Load,Query};
 
 extern crate nom;
 
 use std::io;
 use std::io::prelude::*; //needed for flushing stdout
 use std::net::{Ipv4Addr,SocketAddrV4,TcpStream};
-use std::path::Path;
 use std::str::FromStr;
 
 fn main() {
@@ -23,20 +22,17 @@ fn main() {
     let mut host_port: u16 = 0 as u16;
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
-        parser.set_description("Start up a cqdb node");
+        parser.set_description("Start up a cqdb client session");
         parser.refer(&mut host_ip).add_option(&["-i", "--host-ip"], Store, "Ip address of the host to connect to").required();
         parser.refer(&mut host_port).add_option(&["-p", "--host-port"], Store, "Port of the host to connect to").required();
         parser.parse_args_or_exit();
     }
-   
-    let host_ip = match Ipv4Addr::from_str(&host_ip[..]) {
-        Ok(host_ip) => host_ip,
-        Err(_) => panic!("Unable to parse ip '{}'", host_ip),
-    };
 
+    //parse the host address
+    let host_ip = Ipv4Addr::from_str(&host_ip[..]).unwrap();
     let host_addr = SocketAddrV4::new(host_ip, host_port);
 
-    //read user input
+    //loop read user input
     let stdin = io::stdin();
     let mut line = String::new();
     loop {
@@ -49,11 +45,11 @@ fn main() {
 
         //parse command
         let cmd = match cqdb::parser::cmd(&line.clone().into_bytes()[..]) {
-            nom::IResult::Done(bytes, query) => {
+            nom::IResult::Done(bytes, cmd) => {
                 if bytes.len() != 0 {
                     Help
                 } else {
-                    query
+                    cmd
                 }
             },
             _ => {
@@ -64,23 +60,20 @@ fn main() {
 
         //execute command
         match cmd {
+            Exit => {
+                break;
+            },
             Help => {
+                println!("\tEXIT => exit the session");
+                println!("\tHELP => print this menu");
                 println!("\tLOAD <filename> => load csv file into cluster");
                 println!("\tSELECT [ * | <field> ( , <field> )* ] WHERE <field> ~<type> <value> (AND <field> ~<type> <value>)* => perfrom query on cluster");
-                println!("\tHELP => print this menu");
             },
-            Load(file_name) => {
-                //parse out filename
-                /*let path = Path::new(&file_name[..]);
-                let filename = match path.file_name().unwrap().to_str() {
-                    Some(filename) => filename,
-                    None => panic!("invalid filename"),
-                };*/
-
+            Load(filename) => {
                 //open csv file reader and read header
-                let reader = csv::Reader::from_file(file_name.clone());
+                let reader = csv::Reader::from_file(filename.clone());
                 if !reader.is_ok() {
-                    println!("file '{}' does not exist or cannot be opened", file_name);
+                    println!("file '{}' does not exist or cannot be opened", filename);
                     continue;
                 }
                 let mut reader = reader.unwrap();
@@ -111,7 +104,7 @@ fn main() {
                     record_count += 1;
                 }
 
-                println!("\t{}: {} records", file_name, record_count);
+                println!("\t{}: {} records", filename, record_count);
 
             },
             Query(field_names, filters) => {
@@ -125,7 +118,7 @@ fn main() {
                     for filter in filters {
                         let mut query_filter = query_filters.borrow().get(idx);
                         query_filter.set_field_name(&filter.field_name[..]);
-                        query_filter.set_type(&filter.filter_type[..]);
+                        query_filter.set_filter_type(&filter.filter_type[..]);
                         query_filter.set_value(&filter.value[..]);
                         idx += 1;
                     }

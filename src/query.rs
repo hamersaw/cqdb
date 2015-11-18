@@ -45,7 +45,7 @@ pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, field
                     }
                 }
             },
-            _ => panic!("Unknown filter type {}", filter_type),
+            _ => println!("Unknown filter type {}", filter_type),
         }
     }
 

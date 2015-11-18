@@ -2,27 +2,33 @@ use nom::{alpha,alphanumeric,space};
 use std;
 
 pub enum Command {
-    Query( Vec<String>, Vec<Filter> ),
-    Load( String ),
+    Exit,
     Help,
+    Load( String ),
+    Query( Vec<String>, Vec<Filter> ),
+}
+
+pub struct Filter {
+    pub field_name: String,
+    pub filter_type: String,
+    pub value: String,
 }
 
 named!(
     pub cmd<Command>,
     alt!(
-        query
-      | load
+        exit
       | help
+      | load
+      | query
     )
 );
 
 named!(
-    pub load<Command>,
+    pub exit<Command>,
     chain!(
-        tag!("LOAD") ~
-        space ~
-        file_name: id,
-        || { Command::Load(file_name) }
+        tag!("EXIT"),
+        || { Command::Exit }
     )
 );
 
@@ -31,27 +37,6 @@ named!(
     chain!(
         tag!("HELP"),
         || { Command::Help }
-    )
-);
-
-#[derive(Clone)]
-pub struct Filter {
-    pub field_name: String,
-    pub filter_type: String,
-    pub value: String,
-}
-
-
-named!(
-    pub filter<Filter>,
-    chain!(
-        field_name: id ~
-        space ~
-        tag!("~") ~
-        filter_type: id ~
-        space ~
-        value: id,
-        || Filter { field_name: field_name, filter_type: filter_type, value: value }
     )
 );
 
@@ -83,6 +68,75 @@ named!(
 );
 
 named!(
+    pub filename<String>,
+    chain!(
+        chars: many1!(
+            map_res!(
+                alt!(
+                    tag!("-") | tag!("_") | tag!("/") | tag!(".") | alphanumeric
+                ), 
+                std::str::from_utf8
+            )
+        ),
+        || {
+            chars.into_iter().fold(
+                "".to_string(), 
+                |mut f, c| {
+                   f.push_str(c);
+                   f
+                }
+            )
+        }
+    )
+);
+
+named!(
+    pub filter<Filter>,
+    chain!(
+        field_name: id ~
+        space ~
+        tag!("~") ~
+        filter_type: id ~
+        space ~
+        value: id,
+        || Filter { field_name: field_name, filter_type: filter_type, value: value }
+    )
+);
+
+named!(
+    pub id<String>,
+    chain!(
+        chars: many1!(
+            map_res!(
+                alt!(
+                    tag!("-") | tag!("_") | tag!(".") | alphanumeric
+                ), 
+                std::str::from_utf8
+            )
+        ),
+        || {
+            chars.into_iter().fold(
+                "".to_string(), 
+                |mut f, c| {
+                   f.push_str(c);
+                   f
+                }
+            )
+        }
+    )
+);
+
+named!(
+    pub load<Command>,
+    chain!(
+        tag!("LOAD") ~
+        space ~
+        f: filename,
+        || { Command::Load(f) }
+    )
+);
+
+named!(
     pub query<Command>,
     chain!(
         tag!("SELECT") ~
@@ -97,8 +151,8 @@ named!(
                 space ~
                 tag!("AND") ~
                 space ~
-                and_filter: filter,
-                || { and_filter }
+                f: filter,
+                || { f }
             )
         ),
         || {
@@ -116,29 +170,4 @@ named!(
 );
 
 // Matches a setting name of the form [-a-zA-Z0-9_/.]+
-named!(
-    id<&[u8], String>,
-    chain!(
-        t: many1!(
-            map_res!(
-                alt!(
-                    tag!("-")
-                  | tag!("_")
-                  | tag!("/")
-                  | tag!(".")
-                  | alphanumeric
-                ), 
-                std::str::from_utf8
-            )
-        ),
-        || {
-            t.into_iter().fold(
-                "".to_string(), 
-                |mut accum, slice| {
-                   accum.push_str(slice);
-                   accum
-                }
-            )
-        }
-    )
-);
+

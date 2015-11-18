@@ -11,7 +11,7 @@ struct Field {
 
 struct Filter {
 	fieldName @0 :Text;
-	type @1 :Text;
+	filterType @1 :Text;
 	value @2 :Text;
 }
 

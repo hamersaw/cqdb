@@ -145,12 +145,19 @@ pub fn main() {
 
                             //send messages to all peers - TODO start a new thread for each request to improve speed - send simultaneous requests
                             {
+                                let field_name = filter.get_field_name().unwrap();
+                                let filter_type = filter.get_filter_type().unwrap();
+                                let value = filter.get_value().unwrap();
+
                                 //create query field message
                                 let mut msg_builder = capnp::message::Builder::new_default();
                                 {
                                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                    let mut query_field_msg = msg.get_msg_type().init_query_field_msg();
-                                    query_field_msg.set_filter(filter).unwrap();
+                                    let query_field_msg = msg.get_msg_type().init_query_field_msg();
+                                    let mut filter = query_field_msg.get_filter().unwrap();
+                                    filter.set_field_name(field_name);
+                                    filter.set_filter_type(filter_type);
+                                    filter.set_value(value);
                                 }
 
                                 let lookup_table = lookup_table.read().unwrap();
@@ -275,7 +282,7 @@ pub fn main() {
 
                         //match field value
                         let fields = fields.read().unwrap();
-                        let entity_keys = cqdb::query::query_field(filter.get_type().unwrap(), filter.get_field_name().unwrap(), filter.get_value().unwrap(), &fields);
+                        let entity_keys = cqdb::query::query_field(filter.get_filter_type().unwrap(), filter.get_field_name().unwrap(), filter.get_value().unwrap(), &fields);
 
                         //create entity keys message
                         let mut msg_builder = capnp::message::Builder::new_default();

@@ -8,7 +8,7 @@ use cqdb::message_capnp;
 use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
 
 extern crate rustp2p;
-use rustp2p::omniscient::event::Event;
+use rustp2p::zero_hop::event::Event;
 
 use std::collections::{BTreeMap,HashMap,HashSet,LinkedList};
 use std::hash::{Hash,Hasher,SipHasher};
@@ -59,7 +59,7 @@ pub fn main() {
     let fields: Arc<RwLock<HashMap<String,HashMap<String,LinkedList<u64>>>>> = Arc::new(RwLock::new(HashMap::new()));
 
     //start up the p2p service
-    let rx = rustp2p::omniscient::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
+    let rx = rustp2p::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
 
     //start listening on the application
     let lookup_table = lookup_table.clone();
@@ -91,7 +91,7 @@ pub fn main() {
 
                         //lookup into peer table
                         let lookup_table = lookup_table.read().unwrap();
-                        let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, entity_key).unwrap();
+                        let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
 
                         //create write entity message
                         let mut msg_builder = capnp::message::Builder::new_default();
@@ -114,7 +114,7 @@ pub fn main() {
                             let field_token = hasher.finish();
 
                             //lookup into peer table
-                            let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, field_token).unwrap();
+                            let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
 
                             //create write field message
                             let mut msg_builder = capnp::message::Builder::new_default();
@@ -229,7 +229,7 @@ pub fn main() {
                             for entity_key in entity_keyset {
                                 //lookup key
                                 let lookup_table = lookup_table.read().unwrap();
-                                let socket_addr = rustp2p::omniscient::service::lookup(&lookup_table, entity_key).unwrap();
+                                let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
 
                                 //create query entity message
                                 let mut msg_bldr = capnp::message::Builder::new_default();

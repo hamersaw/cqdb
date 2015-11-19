@@ -79,8 +79,7 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
-- change multi threaded query filter messages to use channels to return a list of entity ids instead of Arc::RwLock::...
 - need quoted fields in parser
 - pass arguments to the filter types (edit distance count, ngram min score, etc..)
 - need to allow bulk loading of values - don't create a connection for each insert
-- error handling could use all kinds of work - everywhere
+- potentially work more with channels - server query filter/entity requests

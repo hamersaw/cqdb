@@ -168,6 +168,3 @@ named!(
         }
     )
 );
-
-// Matches a setting name of the form [-a-zA-Z0-9_/.]+
-

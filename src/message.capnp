@@ -35,7 +35,7 @@ struct Message {
 		queryEntityMsg :group {
 			entityKey @5 :UInt64;
 		}
-		queryFieldMsg :group {
+		queryFilterMsg :group {
 			filter @6 :Filter;
 		}
 		writeEntityMsg :group {

@@ -82,6 +82,5 @@ node3 - token:99
 - need quoted fields in parser
 - pass arguments to the filter types (edit distance count, ngram min score, etc..)
 - format the returned results decently
-- start a new thread for each query field message sent - improves performance over iteratively sending to peers
 - need to allow bulk loading of values - don't create a connection for each insert
 - error handling could use all kinds of work - everywhere

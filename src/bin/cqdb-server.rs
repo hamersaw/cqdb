@@ -5,7 +5,7 @@ extern crate capnp;
 
 extern crate cqdb;
 use cqdb::message_capnp;
-use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFieldMsg,WriteEntityMsg,WriteFieldMsg};
+use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
 
 extern crate rustp2p;
 use rustp2p::omniscient::event::Event;
@@ -143,25 +143,28 @@ pub fn main() {
                                 filter_keyset.clear();
                             }
 
-                            //send messages to all peers - TODO start a new thread for each request to improve speed - send simultaneous requests
-                            {
-                                let field_name = filter.get_field_name().unwrap();
-                                let filter_type = filter.get_filter_type().unwrap();
-                                let value = filter.get_value().unwrap();
+                            //send query field messages to all peers
+                            let mut thread_handles = Vec::new();
+                            let lookup_table = lookup_table.read().unwrap();
+                            for (_, peer_socket_addr) in lookup_table.iter() {
+                                let field_name = filter.get_field_name().unwrap().to_string();
+                                let filter_type = filter.get_filter_type().unwrap().to_string();
+                                let value = filter.get_value().unwrap().to_string();
 
-                                //create query field message
-                                let mut msg_builder = capnp::message::Builder::new_default();
-                                {
-                                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                    let query_field_msg = msg.get_msg_type().init_query_field_msg();
-                                    let mut filter = query_field_msg.get_filter().unwrap();
-                                    filter.set_field_name(field_name);
-                                    filter.set_filter_type(filter_type);
-                                    filter.set_value(value);
-                                }
+                                let filter_keyset = filter_keyset.clone();
+                                let peer_socket_addr = peer_socket_addr.clone();
 
-                                let lookup_table = lookup_table.read().unwrap();
-                                for (_, peer_socket_addr) in lookup_table.iter() {
+                                let handle = thread::spawn(move || {
+                                    let mut msg_builder = capnp::message::Builder::new_default();
+                                    {
+                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                        let query_filter_msg = msg.get_msg_type().init_query_filter_msg();
+                                        let mut filter = query_filter_msg.get_filter().unwrap();
+                                        filter.set_field_name(&field_name[..]);
+                                        filter.set_filter_type(&filter_type[..]);
+                                        filter.set_value(&value[..]);
+                                    }
+
                                     let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
                                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
 
@@ -182,7 +185,15 @@ pub fn main() {
                                         Ok(_) => panic!("Unknown message type"),
                                         Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
                                     }
-                                }
+
+                                });
+
+                                thread_handles.push(handle);
+                            }
+
+                            //wait until all threads finish execution
+                            for handle in thread_handles {
+                                handle.join().unwrap();
                             }
 
                             //update entity token set
@@ -277,8 +288,8 @@ pub fn main() {
                         //send entity message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                     },
-                    Ok(QueryFieldMsg(query_field_msg)) => {
-                        let filter = query_field_msg.get_filter().unwrap();
+                    Ok(QueryFilterMsg(query_filter_msg)) => {
+                        let filter = query_filter_msg.get_filter().unwrap();
 
                         //match field value
                         let fields = fields.read().unwrap();

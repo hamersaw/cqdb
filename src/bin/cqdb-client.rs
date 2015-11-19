@@ -12,6 +12,7 @@ use cqdb::parser::Command::{Exit,Help,Load,Query};
 
 extern crate nom;
 
+use std::collections::BTreeMap;
 use std::io;
 use std::io::prelude::*; //needed for flushing stdout
 use std::net::{Ipv4Addr,SocketAddrV4,TcpStream};
@@ -135,16 +136,74 @@ fn main() {
                 //parse out message
                 match msg.get_msg_type().which() {
                     Ok(EntitiesMsg(entities_msg)) => {
-                        //loop through result entities
                         let entities = entities_msg.get_entities().unwrap();
-                        for entity in entities.iter() {
-                            println!("Entity");
+                        let mut field_lengths = BTreeMap::new();
 
+                        //find lengths of fields
+                        for entity in entities.iter() {
                             let fields = entity.get_fields().unwrap();
                             for field in fields.iter() {
-                                //TODO only print off it it's in field_names
-                                println!("{}: {}", field.get_name().unwrap(), field.get_value().unwrap());
+                                let field_name = field.get_name().unwrap();
+                                let value = field.get_value().unwrap();
+
+                                //if the field name is not required in output continue
+                                if !field_names.contains(&field_name.to_string()) && field_names.len() != 0 {
+                                    continue;
+                                }
+
+                                //if field name hasn't been inserted in field lengths yet insert
+                                if !field_lengths.contains_key(field_name) {
+                                    field_lengths.insert(field_name, field_name.len() as u32);
+                                }
+
+                                //if length is greater than previous insert
+                                if value.len() as u32 > *field_lengths.get(field_name).unwrap() {
+                                    field_lengths.insert(field_name, value.len() as u32);
+                                }
                             }
+                        }
+                        
+                        //print out fields
+                        let mut total_length = 1;
+                        print!("|");
+                        for (field_name, length) in field_lengths.iter() {
+                            print!(" ");
+                            for _ in 0..(length - field_name.len() as u32) {
+                                print!(" ");
+                            }
+                            print!("{} |", field_name);
+
+                            total_length += 3 + length;
+                        }
+                        println!("");
+
+                        //print separating line
+                        for _ in 0..total_length {
+                            print!("-");
+                        }
+                        println!("");
+
+                        //print out entities
+                        for entity in entities.iter() {
+                            print!("|");
+                            for (field_name, length) in field_lengths.iter() {
+                                let fields = entity.get_fields().unwrap();
+                                
+                                for field in fields.iter() {
+                                    let name = field.get_name().unwrap();
+                                    if &name != field_name {
+                                        continue;
+                                    }
+
+                                    let value = field.get_value().unwrap();
+                                    print!(" ");
+                                    for _ in 0..(length - value.len() as u32) {
+                                        print!(" ");
+                                    }
+                                    print!("{} |", value);
+                                }
+                            }
+                            println!("");
                         }
                     },
                     Ok(_) => panic!("Unknown message type"),

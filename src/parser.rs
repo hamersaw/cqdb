@@ -1,4 +1,4 @@
-use nom::{alpha,alphanumeric,space};
+use nom::{alphanumeric,space};
 use std;
 
 pub enum Command {
@@ -45,20 +45,20 @@ named!(
     alt!(
         tag!("*") => { |_| Vec::new() }
         | chain! (
-            field_name: alpha ~
+            field_name: id ~
             field_names: many0!(
                 chain!(
                     opt!(space) ~
                     tag!(",") ~
                     opt!(space) ~
-                    field_name: alpha,
+                    field_name: id,
                     || field_name
                 )
             ),
             || {
-                let mut rtn_field_names = vec!(std::str::from_utf8(field_name).unwrap().to_string());
+                let mut rtn_field_names = vec!(field_name);
                 for field_name in field_names {
-                    rtn_field_names.push(std::str::from_utf8(field_name).unwrap().to_string());
+                    rtn_field_names.push(field_name);
                 }
 
                 rtn_field_names

@@ -23,13 +23,17 @@ A distributed database for fuzzy matching entities.
 ####Client
 ```bash
 ./cqdb-client -i 127.0.0.1 -p 15605
+```
+
+####Client commands
+```bash
 LOAD /home/hamersaw/downloads/mock5000.csv
 SELECT * WHERE first_name ~equality() daniel
 SELECT * WHERE first_name ~levenshtein(3) daniel
 SELECT * WHERE first_name ~ngram(3,0.75) daniel
 SELECT * WHERE first_name ~soundex() daniel
-SELECT * WHERE first_name ~levenshtein(3) danny AND last_name ~soundex() rammer
-````
+SELECT first_name, last_name, email WHERE first_name ~levenshtein(3) danny AND last_name ~soundex() rammer
+```
 
 ##Storage Architecture Concepts
 - All of the fields of an entity are hashed to compute a record key

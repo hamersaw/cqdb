@@ -11,6 +11,7 @@ pub enum Command {
 pub struct Filter {
     pub field_name: String,
     pub filter_type: String,
+    pub params: Vec<String>,
     pub value: String,
 }
 
@@ -97,9 +98,10 @@ named!(
         space ~
         tag!("~") ~
         filter_type: id ~
+        params : filter_params ~
         space ~
         value: id,
-        || Filter { field_name: field_name, filter_type: filter_type, value: value }
+        || Filter { field_name: field_name, filter_type: filter_type, params: params,  value: value }
     )
 );
 
@@ -133,6 +135,37 @@ named!(
         space ~
         f: filename,
         || { Command::Load(f) }
+    )
+);
+
+named!(
+    pub filter_params<Vec<String> >,
+    chain!(
+        tag!("(") ~
+        params: opt_res!(
+            chain! (
+                param: id ~
+                params: many0!(
+                    chain!(
+                        opt!(space) ~
+                        tag!(",") ~
+                        opt!(space) ~
+                        param: id,
+                        || param
+                    )
+                ),
+                || {
+                    let mut rtn_params = vec!(param);
+                    for param in params {
+                        rtn_params.push(param);
+                    }
+
+                    rtn_params
+                }
+            )
+        ) ~
+        tag!(")"),
+        || { params.unwrap() }
     )
 );
 

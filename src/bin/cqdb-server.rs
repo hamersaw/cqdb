@@ -145,18 +145,27 @@ pub fn main() {
                                 filter_keyset.clear();
                             }
 
+                            let filter_params = filter.get_params().unwrap();
+                            let mut params = Vec::new();
+                            for i in 0..filter_params.len() {
+                                params.push(filter_params.get(i).unwrap().to_string());
+                            }
+
                             //send query field messages to all peers
                             let mut thread_handles = Vec::new();
                             let lookup_table = lookup_table.read().unwrap();
                             for (_, peer_socket_addr) in lookup_table.iter() {
+                                //create variables for query filter message
                                 let field_name = filter.get_field_name().unwrap().to_string();
                                 let filter_type = filter.get_filter_type().unwrap().to_string();
+                                let params = params.clone();
                                 let value = filter.get_value().unwrap().to_string();
 
                                 let filter_keyset = filter_keyset.clone();
                                 let peer_socket_addr = peer_socket_addr.clone();
 
                                 let handle = thread::spawn(move || {
+                                    //create query filter message
                                     let mut msg_builder = capnp::message::Builder::new_default();
                                     {
                                         let msg = msg_builder.init_root::<message_capnp::message::Builder>();
@@ -165,8 +174,16 @@ pub fn main() {
                                         filter.set_field_name(&field_name[..]);
                                         filter.set_filter_type(&filter_type[..]);
                                         filter.set_value(&value[..]);
+
+                                        let mut filter_params = filter.init_params(params.len() as u32);
+                                        let mut param_index = 0;
+                                        for param in params {
+                                            filter_params.set(param_index, &param[..]);
+                                            param_index += 1;
+                                        }
                                     }
 
+                                    //send query filter message
                                     let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
                                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
 
@@ -293,9 +310,16 @@ pub fn main() {
                     Ok(QueryFilterMsg(query_filter_msg)) => {
                         let filter = query_filter_msg.get_filter().unwrap();
 
-                        //match field value
+                        //create values for query
                         let fields = fields.read().unwrap();
-                        let entity_keys = cqdb::query::query_field(filter.get_filter_type().unwrap(), filter.get_field_name().unwrap(), filter.get_value().unwrap(), &fields);
+                        let mut params = Vec::new();
+                        let filter_params = filter.get_params().unwrap();
+                        for i in 0..filter_params.len() {
+                            params.push(filter_params.get(i).unwrap());
+                        }
+
+                        //query
+                        let entity_keys = cqdb::query::query_field(filter.get_field_name().unwrap(), filter.get_filter_type().unwrap(), params, filter.get_value().unwrap(), &fields);
 
                         //create entity keys message
                         let mut msg_builder = capnp::message::Builder::new_default();

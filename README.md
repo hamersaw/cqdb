@@ -23,6 +23,12 @@ A distributed database for fuzzy matching entities.
 ####Client
 ```bash
 ./cqdb-client -i 127.0.0.1 -p 15605
+LOAD /home/hamersaw/downloads/mock5000.csv
+SELECT * WHERE first_name ~equality() daniel
+SELECT * WHERE first_name ~levenshtein(3) daniel
+SELECT * WHERE first_name ~ngram(3,0.75) daniel
+SELECT * WHERE first_name ~soundex() daniel
+SELECT * WHERE first_name ~levenshtein(3) danny AND last_name ~soundex() rammer
 ````
 
 ##Storage Architecture Concepts
@@ -79,6 +85,6 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
-- 2. need quoted fields in parser
-- 1. pass arguments to the filter types (edit distance count, ngram min score, etc..)
+- need quoted fields in parser
 - potentially work more with channels - server query filter/entity requests
+- all kinds of error handling - there's essentially none currently

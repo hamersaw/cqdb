@@ -12,7 +12,8 @@ struct Field {
 struct Filter {
 	fieldName @0 :Text;
 	filterType @1 :Text;
-	value @2 :Text;
+	params @2 :List(Text);
+	value @3 :Text;
 }
 
 struct Message {

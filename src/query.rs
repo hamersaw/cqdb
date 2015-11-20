@@ -2,7 +2,7 @@ extern crate ruzzy;
 
 use std::collections::{HashMap,HashSet,LinkedList};
 
-pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, fields: &HashMap<String,HashMap<String,LinkedList<u64>>>) -> HashSet<u64> {
+pub fn query_field(field_name: &str, filter_type: &str, params: Vec<&str>, field_value: &str, fields: &HashMap<String,HashMap<String,LinkedList<u64>>>) -> HashSet<u64> {
     let mut entity_keys = HashSet::new();
     if fields.contains_key(&field_name[..]) {
         let field_values = fields.get(&field_name[..]).unwrap();
@@ -19,8 +19,10 @@ pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, field
                 }
             },
             "levenshtein" => {
+                let max_distance = params[0].parse::<i32>().unwrap();
+
                 for (value, entity_key_list) in field_values.iter() {
-                    if ruzzy::levenshtein::levenshtein(value, field_value) <= 2 {
+                    if ruzzy::levenshtein::levenshtein(value, field_value) <= max_distance {
                         for entity_key in entity_key_list {
                             entity_keys.insert(*entity_key);
                         }
@@ -28,8 +30,11 @@ pub fn query_field(filter_type: &str, field_name: &str, field_value: &str, field
                 }
             },
             "ngram" => {
+                let ngram_size = params[0].parse::<usize>().unwrap();
+                let min_score = params[1].parse::<f32>().unwrap();
+
                 for (value, entity_key_list) in field_values.iter() {
-                    if ruzzy::ngram::ngram(value, field_value, 3) >= 0.85 {
+                    if ruzzy::ngram::ngram(value, field_value, ngram_size) >= min_score {
                         for entity_key in entity_key_list {
                             entity_keys.insert(*entity_key);
                         }

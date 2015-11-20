@@ -157,13 +157,22 @@ fn main() {
                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                     let query_msg = msg.get_msg_type().init_query_msg();
                     let mut query_filters = query_msg.init_filters(filters.len() as u32);
-                    let mut idx = 0;
+                    let mut filter_index = 0;
                     for filter in filters {
-                        let mut query_filter = query_filters.borrow().get(idx);
+                        let mut query_filter = query_filters.borrow().get(filter_index);
                         query_filter.set_field_name(&filter.field_name[..]);
                         query_filter.set_filter_type(&filter.filter_type[..]);
                         query_filter.set_value(&filter.value[..]);
-                        idx += 1;
+                        
+                        println!("params.len(): {}", filter.params.len());
+                        let mut filter_params = query_filter.init_params(filter.params.len() as u32);
+                        let mut param_index = 0;
+                        for param in filter.params {
+                            filter_params.set(param_index, &param[..]);
+                            param_index += 1;
+                        }
+
+                        filter_index += 1;
                     }
                 }
 

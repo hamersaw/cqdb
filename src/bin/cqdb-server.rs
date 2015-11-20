@@ -5,7 +5,7 @@ extern crate capnp;
 
 extern crate cqdb;
 use cqdb::message_capnp;
-use cqdb::message_capnp::message::msg_type::{InsertEntityMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
+use cqdb::message_capnp::message::msg_type::{InsertEntitiesMsg,EntityMsg,EntityKeysMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
 
 extern crate rustp2p;
 use rustp2p::zero_hop::event::Event;
@@ -81,53 +81,55 @@ pub fn main() {
 
                 //parse out message
                 match msg.get_msg_type().which() {
-                    Ok(InsertEntityMsg(insert_entity_msg)) => {
-                        //compute hash over all fields
-                        let mut hasher = SipHasher::new();
-                        for field in insert_entity_msg.get_fields().unwrap().iter() {
-                            field.get_value().unwrap().hash(&mut hasher);
-                        }
-                        let entity_key = hasher.finish();
-
-                        //lookup into peer table
-                        let lookup_table = lookup_table.read().unwrap();
-                        let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
-
-                        //create write entity message
-                        let mut msg_builder = capnp::message::Builder::new_default();
-                        {
-                            let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                            let mut write_entity_msg = msg.get_msg_type().init_write_entity_msg();
-                            write_entity_msg.set_entity_key(entity_key);
-                            write_entity_msg.set_fields(insert_entity_msg.get_fields().unwrap()).unwrap();
-                        }
-
-                        //send write entity message
-                        let mut stream = TcpStream::connect(socket_addr).unwrap();
-                        capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                        //send write field value message
-                        for field in insert_entity_msg.get_fields().unwrap().iter() {
-                            //compute hash of field value
+                    Ok(InsertEntitiesMsg(insert_entities_msg)) => {
+                        for entity in insert_entities_msg.get_entities().unwrap().iter() {
+                            //compute hash over all fields
                             let mut hasher = SipHasher::new();
-                            field.get_value().unwrap().hash(&mut hasher);
-                            let field_token = hasher.finish();
+                            for field in entity.get_fields().unwrap().iter() {
+                                field.get_value().unwrap().hash(&mut hasher);
+                            }
+                            let entity_key = hasher.finish();
 
                             //lookup into peer table
-                            let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
+                            let lookup_table = lookup_table.read().unwrap();
+                            let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
 
-                            //create write field message
+                            //create write entity message
                             let mut msg_builder = capnp::message::Builder::new_default();
                             {
                                 let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                let mut write_field_msg = msg.get_msg_type().init_write_field_msg();
-                                write_field_msg.set_entity_key(entity_key);
-                                write_field_msg.set_field(field).unwrap();
+                                let mut write_entity_msg = msg.get_msg_type().init_write_entity_msg();
+                                write_entity_msg.set_entity_key(entity_key);
+                                write_entity_msg.set_fields(entity.get_fields().unwrap()).unwrap();
                             }
 
-                            //send write field message
+                            //send write entity message
                             let mut stream = TcpStream::connect(socket_addr).unwrap();
                             capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                            //send write field value message
+                            for field in entity.get_fields().unwrap().iter() {
+                                //compute hash of field value
+                                let mut hasher = SipHasher::new();
+                                field.get_value().unwrap().hash(&mut hasher);
+                                let field_token = hasher.finish();
+
+                                //lookup into peer table
+                                let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
+
+                                //create write field message
+                                let mut msg_builder = capnp::message::Builder::new_default();
+                                {
+                                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                    let mut write_field_msg = msg.get_msg_type().init_write_field_msg();
+                                    write_field_msg.set_entity_key(entity_key);
+                                    write_field_msg.set_field(field).unwrap();
+                                }
+
+                                //send write field message
+                                let mut stream = TcpStream::connect(socket_addr).unwrap();
+                                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                            }
                         }
                     },
                     Ok(QueryMsg(query_msg)) => {

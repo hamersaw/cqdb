@@ -79,7 +79,6 @@ node3 - token:99
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
 
 ##TODO
-- need quoted fields in parser
-- pass arguments to the filter types (edit distance count, ngram min score, etc..)
-- need to allow bulk loading of values - don't create a connection for each insert
+- 2. need quoted fields in parser
+- 1. pass arguments to the filter types (edit distance count, ngram min score, etc..)
 - potentially work more with channels - server query filter/entity requests

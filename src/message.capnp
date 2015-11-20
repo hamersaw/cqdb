@@ -26,8 +26,8 @@ struct Message {
 		entityKeysMsg :group {
 			entityKeys @2 :List(UInt64);
 		}
-		insertEntityMsg :group {
-			fields @3 :List(Field);
+		insertEntitiesMsg :group {
+			entities @3 :List(Entity);
 		}
 		queryMsg :group {
 			filters @4 :List(Filter);

@@ -80,33 +80,75 @@ fn main() {
                 let mut reader = reader.unwrap();
                 let header = reader.headers().unwrap();
 
-                //read records
+                //loop through all records in the reader
                 let mut record_count = 0;
+                let mut record_buffer = Vec::new();
                 for record in reader.records() {
                     let record = record.unwrap();
+                    record_buffer.push(record.clone());
 
-                    //create insert entity message
+                    if record_buffer.len() == 50 {
+                        let rb_clone = record_buffer.clone();
+                        let mut msg_builder = capnp::message::Builder::new_default();
+                        {
+                            let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
+                            let insert_entities_msg = msg.get_msg_type().init_insert_entities_msg();
+                            let mut entities = insert_entities_msg.init_entities(rb_clone.len() as u32);
+                        
+                            let mut index = 0;
+                            for record in rb_clone {
+                                let entity = entities.borrow().get(index);
+                                let mut fields = entity.init_fields(header.len() as u32);
+
+                                for i in 0..header.len() {
+                                    let mut field = fields.borrow().get(i as u32);
+                                    field.set_name(&header[i][..]);
+                                    field.set_value(&record[i].to_lowercase()[..]);
+                                }
+
+                                index += 1;
+                            }
+                        }
+
+                        //send insert entity message
+                        let mut stream = TcpStream::connect(host_addr).unwrap();
+                        capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                        record_buffer.clear();
+                    }
+
+                    record_count += 1;
+                }
+
+                //send remaining records in the buffer
+                if record_buffer.len() != 0 {
                     let mut msg_builder = capnp::message::Builder::new_default();
                     {
-                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                        let insert_entity_msg = msg.get_msg_type().init_insert_entity_msg();
-                        let mut fields = insert_entity_msg.init_fields(header.len() as u32);
-                        for i in 0..header.len() {
-                            let mut field = fields.borrow().get(i as u32);                            
-                            field.set_name(&header[i][..]);
-                            field.set_value(&record[i].to_lowercase()[..]);
+                        let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
+                        let insert_entities_msg = msg.get_msg_type().init_insert_entities_msg();
+                        let mut entities = insert_entities_msg.init_entities(record_buffer.len() as u32);
+                    
+                        let mut index = 0;
+                        for record in record_buffer {
+                            let entity = entities.borrow().get(index);
+                            let mut fields = entity.init_fields(header.len() as u32);
+
+                            for i in 0..header.len() {
+                                let mut field = fields.borrow().get(i as u32);
+                                field.set_name(&header[i][..]);
+                                field.set_value(&record[i].to_lowercase()[..]);
+                            }
+
+                            index += 1;
                         }
                     }
 
                     //send insert entity message
                     let mut stream = TcpStream::connect(host_addr).unwrap();
                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                    record_count += 1;
                 }
 
                 println!("\t{}: {} records", filename, record_count);
-
             },
             Query(field_names, filters) => {
                 //create query message

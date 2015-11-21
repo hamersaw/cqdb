@@ -36,10 +36,10 @@ SELECT first_name, last_name, email WHERE first_name ~levenshtein(3) danny AND l
 ```
 
 ##Storage Architecture Concepts
-- All of the fields of an entity are hashed to compute a record key
-- A entities record key determines which node the entities full set of field values is stored on
+- All of the fields of an entity are hashed to compute an entity key
+- The entity key determines which node the entities full set of field values are stored on
 - Each field value of an entity is hashed to compute a field value key
-- A pointer to the record key is stored on the appropriate machine for each field value
+- A pointer to the entity key is stored on the appropriate machine for each field value
 
 ##Storage Architecture Example
 For this example the token space is 0-99. All hash values are fictional.
@@ -87,6 +87,7 @@ node3 - token:99
 2. A set of entity keys is returned from each node for each filter
 3. The union of those sets is determined to be entities that match the query
 4. Nodes that are responsible for those entity keys are contacted to get the full set of field values for each entity
+5. All entities are returned to client
 
 ##TODO
 - need quoted fields in parser

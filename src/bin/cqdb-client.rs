@@ -164,7 +164,6 @@ fn main() {
                         query_filter.set_filter_type(&filter.filter_type[..]);
                         query_filter.set_value(&filter.value[..]);
                         
-                        println!("params.len(): {}", filter.params.len());
                         let mut filter_params = query_filter.init_params(filter.params.len() as u32);
                         let mut param_index = 0;
                         for param in filter.params {

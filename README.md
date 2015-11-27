@@ -35,6 +35,17 @@ SELECT * WHERE first_name ~soundex() daniel
 SELECT first_name, last_name, email WHERE first_name ~levenshtein(3) danny AND last_name ~soundex() rammer
 ```
 
+####Filter types
+```bash
+~damerau_levenshtein(max_distance)
+~equality()
+~hamming(max_distance)
+~jaro(min_score)
+~jaro_winkler(min_score)
+~levenshtein(max_distance)
+~ngram(ngram_size,mins_score)
+```
+
 ##Storage Architecture Concepts
 - All of the fields of an entity are hashed to compute an entity key
 - The entity key determines which node the entities full set of field values are stored on

@@ -8,5 +8,3 @@ pub mod message_capnp {
 
 #[macro_use]
 extern crate nom;
-
-extern crate ruzzy;

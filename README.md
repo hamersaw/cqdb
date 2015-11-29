@@ -44,6 +44,7 @@ SELECT first_name, last_name, email WHERE first_name ~levenshtein(3) danny AND l
 ~jaro_winkler(min_score)
 ~levenshtein(max_distance)
 ~ngram(ngram_size,mins_score)
+~soundex()
 ```
 
 ##Storage Architecture Concepts

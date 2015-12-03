@@ -165,7 +165,12 @@ named!(
             )
         ) ~
         tag!(")"),
-        || { params.unwrap() }
+        || { 
+            match params {
+                Ok(_) => params.unwrap(),
+                Err(_) => vec!(),
+            }
+        }
     )
 );
 

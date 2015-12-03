@@ -1,5 +1,5 @@
 extern crate argparse;
-use argparse::{ArgumentParser,Store};
+use argparse::{ArgumentParser,Store,StoreTrue};
 
 extern crate capnp;
 
@@ -16,6 +16,7 @@ use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
 use std::str::FromStr;
 use std::sync::{Arc,RwLock};
+use std::sync::mpsc::channel;
 use std::thread;
 
 pub fn main() {
@@ -26,6 +27,7 @@ pub fn main() {
     let mut service_port: u16 = 0;
     let mut seed_ip: String = "127.0.0.1".to_string();
     let mut seed_port: u16 = 0;
+    let mut debug = false;
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
         parser.set_description("start up a echo server");
@@ -36,6 +38,7 @@ pub fn main() {
         parser.refer(&mut service_port).add_option(&["-p", "--service-port"], Store, "port for the p2p service listen on").required();
         parser.refer(&mut seed_ip).add_option(&["-s", "--seed-ip"], Store, "p2p service seed node ip address");
         parser.refer(&mut seed_port).add_option(&["-e", "--seed-port"], Store, "p2p service seed node port");
+        parser.refer(&mut debug).add_option(&["-d", "--debug"], StoreTrue, "print debug output");
         parser.parse_args_or_exit();
     }
 
@@ -57,6 +60,7 @@ pub fn main() {
     let lookup_table = Arc::new(RwLock::new(BTreeMap::new()));
     let entities: Arc<RwLock<HashMap<u64,HashMap<String,String>>>> = Arc::new(RwLock::new(HashMap::new()));
     let fields: Arc<RwLock<HashMap<String,HashMap<String,LinkedList<u64>>>>> = Arc::new(RwLock::new(HashMap::new()));
+    let (debug_tx, debug_rx) = channel::<String>();
 
     //start up the p2p service
     let rx = rustp2p::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
@@ -65,12 +69,14 @@ pub fn main() {
     let lookup_table = lookup_table.clone();
     let entities = entities.clone();
     let fields = fields.clone();
+    let debug_tx = debug_tx.clone();
     let listener = TcpListener::bind(app_addr).unwrap();
     thread::spawn(move || {
         for stream in listener.incoming() {
             let lookup_table = lookup_table.clone();
             let entities = entities.clone();
             let fields = fields.clone();
+            let debug_tx = debug_tx.clone();
 
             thread::spawn(move || {
                 let mut stream = stream.unwrap();
@@ -306,6 +312,7 @@ pub fn main() {
 
                         //send entity message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                        debug_tx.send(format!("query entity for key '{}'", query_entity_msg.get_entity_key())).unwrap();
                     },
                     Ok(QueryFilterMsg(query_filter_msg)) => {
                         let filter = query_filter_msg.get_filter().unwrap();
@@ -337,17 +344,27 @@ pub fn main() {
 
                         //send entity keys message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                        debug_tx.send(
+                            format!(
+                                "filter type '{}' on field '{}' for value '{}' results in entity keys '{}'",
+                                filter.get_filter_type().unwrap(),
+                                filter.get_field_name().unwrap(),
+                                filter.get_value().unwrap(),
+                                ""
+                            )
+                        ).unwrap();
                     },
                     Ok(WriteEntityMsg(write_entity_msg)) => {
                         //create entity hash map
                         let mut entity = HashMap::new();
-                        for field in  write_entity_msg.get_fields().unwrap().iter() {
+                        for field in write_entity_msg.get_fields().unwrap().iter() {
                             entity.insert(field.get_name().unwrap().to_string(), field.get_value().unwrap().to_string());
                         }
 
                         //insert entity into entities
                         let mut entities = entities.write().unwrap();
                         entities.insert(write_entity_msg.get_entity_key(), entity);
+                        debug_tx.send(format!("wrote entity with key {}", write_entity_msg.get_entity_key())).unwrap();
                     },
                     Ok(WriteFieldMsg(write_field_msg)) => {
                         //get field_values HashMap<String,[]u64>
@@ -369,6 +386,7 @@ pub fn main() {
 
                         let mut entity_tokens = field_values.get_mut(&value[..]).unwrap();
                         entity_tokens.push_back(write_field_msg.get_entity_key());
+                        debug_tx.send(format!("wrote field value {} for field name {} and entity key {}", value, fieldname, write_field_msg.get_entity_key())).unwrap();
                     },
                     Ok(_) => panic!("Unknown message type"),
                     Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
@@ -377,12 +395,18 @@ pub fn main() {
         }
     });
 
+    //listen on debug channel
+    if debug {
+        thread::spawn(move || {
+            while let Ok(msg) = debug_rx.recv() {
+                println!("debug: {}", msg);
+            }
+        });
+    }
+
     //listen for events from the p2p service
     while let Ok(event) = rx.recv() {
         match event {
-            Event::LookupMsgEvent(token) => {
-                println!("recv LookupMsgEvent({})", token);
-            },
             Event::LookupTableMsgEvent(lookup_table) => {
                 println!("PeerTableMsgEvent");
                 for (token, socket_addr) in lookup_table.iter() {
@@ -392,7 +416,7 @@ pub fn main() {
             Event::RegisterTokenMsgEvent(token, socket_addr) => {
                 println!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr);
             },
-            //_ => println!("not processing this event type"),
+            _ => println!("not processing this event type"),
         }
     }
 }

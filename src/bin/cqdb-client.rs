@@ -1,9 +1,8 @@
 extern crate argparse;
 use argparse::{ArgumentParser,Store};
 
-extern crate csv;
-
 extern crate capnp;
+extern crate csv;
 
 extern crate cqdb;
 use cqdb::message_capnp;
@@ -11,6 +10,7 @@ use cqdb::message_capnp::message::msg_type::{EntitiesMsg};
 use cqdb::parser::Command::{Exit,Help,Load,Query};
 
 extern crate nom;
+extern crate time;
 
 use std::collections::BTreeMap;
 use std::io;
@@ -71,6 +71,9 @@ fn main() {
                 println!("\tSELECT [ * | <field> ( , <field> )* ] WHERE <field> ~<type> <value> (AND <field> ~<type> <value>)* => perfrom query on cluster");
             },
             Load(filename) => {
+                //start time
+                let start_time = time::precise_time_ns();
+
                 //open csv file reader and read header
                 let reader = csv::Reader::from_file(filename.clone());
                 if !reader.is_ok() {
@@ -148,9 +151,13 @@ fn main() {
                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                 }
 
-                println!("\t{}: {} records", filename, record_count);
+                let duration = (time::precise_time_ns() - start_time) / 1000000;
+                println!("\tloaded {} records in {}ms", record_count, duration);
             },
             Query(field_names, filters) => {
+                //start time
+                let start_time = time::precise_time_ns();
+
                 //create query message
                 let mut msg_builder = capnp::message::Builder::new_default();
                 {
@@ -182,6 +189,10 @@ fn main() {
                 //read entities tokens message
                 let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
                 let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                //print out query execution time
+                let duration = (time::precise_time_ns() - start_time) / 1000000;
+                println!("query execution in {}ms", duration);
 
                 //parse out message
                 match msg.get_msg_type().which() {

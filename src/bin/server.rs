@@ -83,7 +83,7 @@ pub fn main() {
                 match msg.get_msg_type().which() {
                     Ok(InsertEntitiesMsg(insert_entities_msg)) => {
                         let mut streams = HashMap::new();
-                        for entity in insert_entities_msg.get_entities().unwrap().iter() {
+                        for entity in insert_entities_msg.unwrap().iter() {
                             //compute hash over all fields
                             let mut hasher = SipHasher::new();
                             for field in entity.get_fields().unwrap().iter() {
@@ -224,7 +224,7 @@ pub fn main() {
                         let mut first_iteration = true;
 
                         //submit filter queries
-                        for filter in query_msg.get_filters().unwrap().iter() {
+                        for filter in query_msg.unwrap().iter() {
                             //clear filter keyset
                             {
                                 let mut filter_keyset = filter_keyset.write().unwrap();
@@ -252,13 +252,12 @@ pub fn main() {
                                     let mut msg_builder = capnp::message::Builder::new_default();
                                     {
                                         let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        let query_filter_msg = msg.get_msg_type().init_query_filter_msg();
-                                        let mut filter = query_filter_msg.get_filter().unwrap();
-                                        filter.set_field_name(&field_name[..]);
-                                        filter.set_filter_type(&filter_type[..]);
-                                        filter.set_value(&value[..]);
+                                        let mut query_filter_msg = msg.get_msg_type().init_query_filter_msg();
+                                        query_filter_msg.set_field_name(&field_name[..]);
+                                        query_filter_msg.set_filter_type(&filter_type[..]);
+                                        query_filter_msg.set_value(&value[..]);
 
-                                        let mut filter_params = filter.init_params(params.len() as u32);
+                                        let mut filter_params = query_filter_msg.init_params(params.len() as u32);
                                         let mut param_index = 0;
                                         for param in params {
                                             filter_params.set(param_index, &param[..]);
@@ -279,7 +278,7 @@ pub fn main() {
                                         Ok(EntityKeysMsg(entity_keys_msg)) => {
                                             //add to entity tokens list
                                             let mut filter_keyset = filter_keyset.write().unwrap();
-                                            let entity_keys = entity_keys_msg.get_entity_keys().unwrap();
+                                            let entity_keys = entity_keys_msg.unwrap();
                                             for i in 0..entity_keys.len() {
                                                 filter_keyset.insert(entity_keys.get(i));
                                             }
@@ -334,8 +333,7 @@ pub fn main() {
                                     let mut msg_builder = capnp::message::Builder::new_default();
                                     {
                                         let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        let mut query_entity_msg = msg.get_msg_type().init_query_entity_msg();
-                                        query_entity_msg.set_entity_key(entity_key);
+                                        msg.get_msg_type().set_query_entity_msg(entity_key);
                                     }
                                 
                                     //send query entity message
@@ -352,7 +350,7 @@ pub fn main() {
                                     //parse out message
                                     match msg.get_msg_type().which() {
                                         Ok(EntityMsg(entity_msg)) => {
-                                            let fields = entity_msg.get_fields().unwrap();
+                                            let fields = entity_msg.unwrap();
                                             for field in fields.iter() {
                                                 entity.insert(field.get_name().unwrap().to_string(), field.get_value().unwrap().to_string());
                                             }
@@ -379,12 +377,11 @@ pub fn main() {
                                 let entities = entities.read().unwrap();
 
                                 let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                let entities_msg = msg.get_msg_type().init_entities_msg();
-                                let mut entities_msg_list = entities_msg.init_entities(entities.len() as u32);
+                                let mut entities_msg = msg.get_msg_type().init_entities_msg(entities.len() as u32);
 
                                 let mut index = 0;
                                 for entity in entities.iter() {
-                                    let entity_msg = entities_msg_list.borrow().get(index);
+                                    let entity_msg = entities_msg.borrow().get(index);
                                     let mut fields = entity_msg.init_fields(entity.len() as u32);
                                     let mut field_index = 0;
                                     for (name, value) in entity {
@@ -405,17 +402,16 @@ pub fn main() {
                     Ok(QueryEntityMsg(query_entity_msg)) => {
                         //search for entity
                         let entities = entities.read().unwrap();
-                        let entity_fields = entities.get(&query_entity_msg.get_entity_key()).unwrap();
+                        let entity_fields = entities.get(&query_entity_msg).unwrap();
 
                         //create entity message
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                            let entity_msg = msg.get_msg_type().init_entity_msg();
-                            let mut fields = entity_msg.init_fields(entity_fields.len() as u32);
+                            let mut entity_msg = msg.get_msg_type().init_entity_msg(entity_fields.len() as u32);
                             let mut index = 0;
                             for (name, value) in entity_fields {
-                                let mut field = fields.borrow().get(index);
+                                let mut field = entity_msg.borrow().get(index);
                                 field.set_name(name);
                                 field.set_value(value);
                                 index += 1;
@@ -424,10 +420,10 @@ pub fn main() {
 
                         //send entity message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-                        debug_tx.send(format!("query entity for key '{}'", query_entity_msg.get_entity_key())).unwrap();
+                        debug_tx.send(format!("query entity for key '{}'", query_entity_msg)).unwrap();
                     },
                     Ok(QueryFilterMsg(query_filter_msg)) => {
-                        let filter = query_filter_msg.get_filter().unwrap();
+                        let filter = query_filter_msg.unwrap();
 
                         //create values for query
                         let fields = fields.read().unwrap();
@@ -444,12 +440,11 @@ pub fn main() {
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                            let entity_keys_msg = msg.get_msg_type().init_entity_keys_msg();
-                            let mut keys = entity_keys_msg.init_entity_keys(entity_keys.len() as u32);
+                            let mut entity_keys_msg = msg.get_msg_type().init_entity_keys_msg(entity_keys.len() as u32);
 
                             let mut count = 0;
                             for entity_key in entity_keys {
-                                keys.set(count, entity_key);
+                                entity_keys_msg.set(count, entity_key);
                                 count+=1;
                             }
                         }

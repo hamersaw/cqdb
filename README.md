@@ -104,7 +104,5 @@ node3 - token:99
 ##TODO
 - need quoted fields in parser
 - push the event messages from rustp2p to the debug output
-- remove unecessary groups in capnproto messsage declaration
 - need to be able to write data faster - exception too many open files (too many connections too fast?) - send result messages?
-- potentially work more with channels - server query filter/entity requests
 - all kinds of error handling - there's essentially none currently

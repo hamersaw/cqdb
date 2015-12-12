@@ -99,12 +99,11 @@ fn main() {
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
-                            let insert_entities_msg = msg.get_msg_type().init_insert_entities_msg();
-                            let mut entities = insert_entities_msg.init_entities(rb_clone.len() as u32);
+                            let mut insert_entities_msg = msg.get_msg_type().init_insert_entities_msg(rb_clone.len() as u32);
                         
                             let mut index = 0;
                             for record in rb_clone {
-                                let entity = entities.borrow().get(index);
+                                let entity = insert_entities_msg.borrow().get(index);
                                 let mut fields = entity.init_fields(header.len() as u32);
 
                                 for i in 0..header.len() {
@@ -136,12 +135,11 @@ fn main() {
                     let mut msg_builder = capnp::message::Builder::new_default();
                     {
                         let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
-                        let insert_entities_msg = msg.get_msg_type().init_insert_entities_msg();
-                        let mut entities = insert_entities_msg.init_entities(record_buffer.len() as u32);
+                        let mut insert_entities_msg = msg.get_msg_type().init_insert_entities_msg(record_buffer.len() as u32);
                     
                         let mut index = 0;
                         for record in record_buffer {
-                            let entity = entities.borrow().get(index);
+                            let entity = insert_entities_msg.borrow().get(index);
                             let mut fields = entity.init_fields(header.len() as u32);
 
                             for i in 0..header.len() {
@@ -170,11 +168,10 @@ fn main() {
                 let mut msg_builder = capnp::message::Builder::new_default();
                 {
                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                    let query_msg = msg.get_msg_type().init_query_msg();
-                    let mut query_filters = query_msg.init_filters(filters.len() as u32);
+                    let mut query_msg = msg.get_msg_type().init_query_msg(filters.len() as u32);
                     let mut filter_index = 0;
                     for filter in filters {
-                        let mut query_filter = query_filters.borrow().get(filter_index);
+                        let mut query_filter = query_msg.borrow().get(filter_index);
                         query_filter.set_field_name(&filter.field_name[..]);
                         query_filter.set_filter_type(&filter.filter_type[..]);
                         query_filter.set_value(&filter.value[..]);
@@ -205,7 +202,7 @@ fn main() {
                 //parse out message
                 match msg.get_msg_type().which() {
                     Ok(EntitiesMsg(entities_msg)) => {
-                        let entities = entities_msg.get_entities().unwrap();
+                        let entities = entities_msg.unwrap();
                         let mut field_lengths = BTreeMap::new();
                         let mut entity_count = 0;
 

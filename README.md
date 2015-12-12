@@ -103,9 +103,8 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
-- when writing a set of entities
-	send open_write_stream_msg to all nodes to open up a tcp stream
-	send write_entity and write_field messages over the tcp stream
-	send close_write_stream_msg message over stream to signal end of communication
+- push the event messages from rustp2p to the debug output
+- remove unecessary groups in capnproto messsage declaration
+- need to be able to write data faster - exception too many open files (too many connections too fast?) - send result messages?
 - potentially work more with channels - server query filter/entity requests
 - all kinds of error handling - there's essentially none currently

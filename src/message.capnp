@@ -18,37 +18,36 @@ struct Filter {
 
 struct Message {
 	msgType :union {
+		closeWriteStreamMsg @0 :Void;
 		entitiesMsg :group {
-			entities @0 :List(Entity);
+			entities @1 :List(Entity);
 		}
 		entityMsg :group {
-			fields @1 :List(Field);
+			fields @2 :List(Field);
 		}
 		entityKeysMsg :group {
-			entityKeys @2 :List(UInt64);
+			entityKeys @3 :List(UInt64);
 		}
 		insertEntitiesMsg :group {
-			entities @3 :List(Entity);
+			entities @4 :List(Entity);
 		}
+		openWriteStreamMsg @5 :Void;
 		queryMsg :group {
-			filters @4 :List(Filter);
+			filters @6 :List(Filter);
 		}
 		queryEntityMsg :group {
-			entityKey @5 :UInt64;
+			entityKey @7 :UInt64;
 		}
 		queryFilterMsg :group {
-			filter @6 :Filter;
-		}
-		resultMsg :group {
-			success @7 :Bool;
+			filter @8:Filter;
 		}
 		writeEntityMsg :group {
-			entityKey @8 :UInt64;
-			fields @9 :List(Field);
+			entityKey @9 :UInt64;
+			fields @10 :List(Field);
 		}
 		writeFieldMsg: group {
-			entityKey @10 :UInt64;
-			field @11 :Field;
+			entityKey @11 :UInt64;
+			field @12 :Field;
 		}
 	}
 }

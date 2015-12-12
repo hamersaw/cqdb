@@ -14,7 +14,7 @@ fn main() {
     let delta = u64::max_value() / (size as u64);
     println!("delta: {}", delta);
 
-    for i in (0..size) {
+    for i in 0..size {
         println!("{}: {}", i, delta * (i as u64));
     }
 }

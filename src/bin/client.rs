@@ -6,7 +6,7 @@ extern crate csv;
 
 extern crate fuzzydb;
 use fuzzydb::message_capnp;
-use fuzzydb::message_capnp::message::msg_type::{EntitiesMsg};
+use fuzzydb::message_capnp::message::msg_type::{EntitiesMsg,ResultMsg};
 use fuzzydb::parser::Command::{Exit,Help,Load,Query};
 
 extern crate nom;
@@ -120,11 +120,22 @@ fn main() {
                         let mut stream = TcpStream::connect(host_addr).unwrap();
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
 
-                        record_buffer.clear();
+                        //wait for success result message
+                        let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                        let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
 
-                        if debug {
-                            println!("inserted {} records", record_count);
+                        match msg.get_msg_type().which() {
+                            Ok(ResultMsg(result_msg)) => {
+                                if result_msg {
+                                    if debug { println!("inserted {} records", record_count); }
+                                } else {
+                                    panic!("Error writing entity buffer");
+                                }
+                            }
+                            _ => panic!("Unexpected message type returned"),
                         }
+
+                        record_buffer.clear();
                     }
 
                     record_count += 1;
@@ -155,6 +166,21 @@ fn main() {
                     //send insert entity message
                     let mut stream = TcpStream::connect(host_addr).unwrap();
                     capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                    //wait for success result message
+                    let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                    let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                    match msg.get_msg_type().which() {
+                        Ok(ResultMsg(result_msg)) => {
+                            if result_msg {
+                                if debug { println!("inserted {} records", record_count); }
+                            } else {
+                                panic!("Error writing entity buffer");
+                            }
+                        }
+                        _ => panic!("Unexpected message type returned"),
+                    }
                 }
 
                 let duration = (time::precise_time_ns() - start_time) / 1000000;

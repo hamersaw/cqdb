@@ -157,6 +157,16 @@ pub fn main() {
                             }
                         }
 
+                        //return result message
+                        {
+                            let mut msg_builder = capnp::message::Builder::new_default();
+                            {
+                                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                                msg.get_msg_type().set_result_msg(true);
+                            }
+                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                        }
+
                         //close all streams
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {

@@ -26,14 +26,15 @@ struct Message {
 		openWriteStreamMsg @5 :Void;
 		queryMsg @6 :List(Filter);
 		queryEntityMsg @7 :UInt64;
-		queryFilterMsg @8:Filter;
+		queryFilterMsg @8 :Filter;
+		resultMsg @9 :Bool;
 		writeEntityMsg :group {
-			entityKey @9 :UInt64;
-			fields @10 :List(Field);
+			entityKey @10 :UInt64;
+			fields @11 :List(Field);
 		}
 		writeFieldMsg: group {
-			entityKey @11 :UInt64;
-			field @12 :Field;
+			entityKey @12 :UInt64;
+			field @13 :Field;
 		}
 	}
 }

@@ -1,5 +1,5 @@
 extern crate argparse;
-use argparse::{ArgumentParser,Store};
+use argparse::{ArgumentParser,Store,StoreTrue};
 
 extern crate capnp;
 extern crate csv;
@@ -20,12 +20,16 @@ use std::str::FromStr;
 
 fn main() {
     let mut host_ip: String = "127.0.0.1".to_string();
-    let mut host_port: u16 = 0 as u16;
+    let mut host_port: u16 = 0;
+    let mut batch_size: u16 = 250;
+    let mut debug = false;
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
         parser.set_description("Start up a cqdb client session");
         parser.refer(&mut host_ip).add_option(&["-i", "--host-ip"], Store, "Ip address of the host to connect to").required();
         parser.refer(&mut host_port).add_option(&["-p", "--host-port"], Store, "Port of the host to connect to").required();
+        parser.refer(&mut batch_size).add_option(&["-b", "--batch-size"], Store, "Number of records in each batch sent for insertion");
+        parser.refer(&mut debug).add_option(&["-d", "--debug"], StoreTrue, "Turn debug output on");
         parser.parse_args_or_exit();
     }
 
@@ -90,7 +94,7 @@ fn main() {
                     let record = record.unwrap();
                     record_buffer.push(record.clone());
 
-                    if record_buffer.len() == 50 {
+                    if record_buffer.len() == batch_size as usize {
                         let rb_clone = record_buffer.clone();
                         let mut msg_builder = capnp::message::Builder::new_default();
                         {
@@ -117,7 +121,15 @@ fn main() {
                         let mut stream = TcpStream::connect(host_addr).unwrap();
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
 
+                        //wait to receive success message
+                        let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                        let _ = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
                         record_buffer.clear();
+
+                        if debug {
+                            println!("inserted {} records", record_count);
+                        }
                     }
 
                     record_count += 1;
@@ -199,6 +211,7 @@ fn main() {
                     Ok(EntitiesMsg(entities_msg)) => {
                         let entities = entities_msg.get_entities().unwrap();
                         let mut field_lengths = BTreeMap::new();
+                        let mut entity_count = 0;
 
                         //find lengths of fields
                         for entity in entities.iter() {
@@ -222,7 +235,11 @@ fn main() {
                                     field_lengths.insert(field_name, value.len() as u32);
                                 }
                             }
+
+                            entity_count += 1;
                         }
+
+                        println!("entities returned {}", entity_count);
                         
                         //print out fields
                         let mut total_length = 1;

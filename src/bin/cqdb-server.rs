@@ -13,7 +13,7 @@ use rustp2p::zero_hop::event::Event;
 use std::collections::{BTreeMap,HashMap,HashSet,LinkedList};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
-use std::net::{Ipv4Addr,SocketAddrV4,TcpListener,TcpStream};
+use std::net::{Ipv4Addr,SocketAddrV4,Shutdown,TcpListener,TcpStream};
 use std::str::FromStr;
 use std::sync::{Arc,RwLock};
 use std::sync::mpsc::channel;
@@ -110,8 +110,19 @@ pub fn main() {
                             }
 
                             //send write entity message
-                            let mut stream = TcpStream::connect(socket_addr).unwrap();
-                            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                            loop {
+                                let mut stream = match TcpStream::connect(socket_addr) {
+                                    Ok(stream) => stream,
+                                    Err(e) => {
+                                        println!("Unable to connect to write entity {}", e);
+                                        std::thread::sleep_ms(10000);
+                                        continue;
+                                    }
+                                };
+
+                                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                                break;
+                            }
 
                             //send write field value message
                             for field in entity.get_fields().unwrap().iter() {
@@ -133,10 +144,32 @@ pub fn main() {
                                 }
 
                                 //send write field message
-                                let mut stream = TcpStream::connect(socket_addr).unwrap();
-                                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                                loop {
+                                    let mut stream = match TcpStream::connect(socket_addr) {
+                                        Ok(stream) => stream,
+                                        Err(e) => {
+                                            println!("Unable to connect to write field {}", e);
+                                            std::thread::sleep_ms(10000);
+                                            continue;
+                                        }
+                                    };
+
+                                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+                                    break;
+                                }
                             }
                         }
+
+                        //send result message
+                        let mut msg_builder = capnp::message::Builder::new_default();
+                        {
+                            let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                            let mut write_field_msg = msg.get_msg_type().init_result_msg();
+                            write_field_msg.set_success(true);
+                        }
+
+                        //send write field message
+                        capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
                     },
                     Ok(QueryMsg(query_msg)) => {
                         let filter_keyset: Arc<RwLock<HashSet<u64>>> = Arc::new(RwLock::new(HashSet::new()));
@@ -391,6 +424,8 @@ pub fn main() {
                     Ok(_) => panic!("Unknown message type"),
                     Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
                 };
+
+                stream.shutdown(Shutdown::Both).unwrap();
             });
         }
     });

@@ -39,13 +39,16 @@ struct Message {
 		queryFilterMsg :group {
 			filter @6 :Filter;
 		}
+		resultMsg :group {
+			success @7 :Bool;
+		}
 		writeEntityMsg :group {
-			entityKey @7 :UInt64;
-			fields @8 :List(Field);
+			entityKey @8 :UInt64;
+			fields @9 :List(Field);
 		}
 		writeFieldMsg: group {
-			entityKey @9 :UInt64;
-			field @10 :Field;
+			entityKey @10 :UInt64;
+			field @11 :Field;
 		}
 	}
 }

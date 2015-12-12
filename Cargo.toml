@@ -1,5 +1,5 @@
 [package]
-name = "cqdb"
+name = "fuzzydb"
 version = "0.1.9"
 authors = ["Dan Rammer <hamersaw@gmail.com>"]
 build = "build.rs"

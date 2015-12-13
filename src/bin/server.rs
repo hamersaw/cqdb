@@ -7,8 +7,8 @@ extern crate fuzzydb;
 use fuzzydb::message_capnp;
 use fuzzydb::message_capnp::message::msg_type::{CloseWriteStreamMsg,InsertEntitiesMsg,EntityMsg,EntityKeysMsg,OpenWriteStreamMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
 
-extern crate rustp2p;
-use rustp2p::zero_hop::event::Event;
+extern crate rustdht;
+use rustdht::zero_hop::event::Event;
 
 use std::collections::{BTreeMap,HashMap,HashSet,LinkedList};
 use std::hash::{Hash,Hasher,SipHasher};
@@ -63,7 +63,7 @@ pub fn main() {
     let (debug_tx, debug_rx) = channel::<String>();
 
     //start up the p2p service
-    let event_rx = rustp2p::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
+    let event_rx = rustdht::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
 
     //start listening on the application
     let (lookup_table, entities, fields, debug_tx) = (lookup_table.clone(), entities.clone(), fields.clone(), debug_tx.clone());
@@ -93,7 +93,7 @@ pub fn main() {
 
                             //lookup into peer table
                             let lookup_table = lookup_table.read().unwrap();
-                            let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
+                            let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
 
                             //create write entity message
                             let mut msg_builder = capnp::message::Builder::new_default();
@@ -129,7 +129,7 @@ pub fn main() {
                                 let field_token = hasher.finish();
 
                                 //lookup into peer table
-                                let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
+                                let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
 
                                 //create write field message
                                 let mut msg_builder = capnp::message::Builder::new_default();
@@ -337,7 +337,7 @@ pub fn main() {
 
                                 let handle = thread::spawn(move || {
                                     let lookup_table = lookup_table.read().unwrap();
-                                    let socket_addr = rustp2p::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
+                                    let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
                                     
                                     //create query entity message
                                     let mut msg_builder = capnp::message::Builder::new_default();

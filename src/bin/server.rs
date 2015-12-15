@@ -15,7 +15,7 @@ use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,Shutdown,TcpListener,TcpStream};
 use std::str::FromStr;
-use std::sync::{Arc,RwLock};
+use std::sync::{Arc,Mutex,RwLock};
 use std::sync::mpsc::channel;
 use std::thread;
 
@@ -61,16 +61,26 @@ pub fn main() {
     let entities: Arc<RwLock<HashMap<u64,HashMap<String,String>>>> = Arc::new(RwLock::new(HashMap::new()));
     let fields: Arc<RwLock<HashMap<String,HashMap<String,LinkedList<u64>>>>> = Arc::new(RwLock::new(HashMap::new()));
     let (debug_tx, debug_rx) = channel::<String>();
+    let arc_debug_tx = Arc::new(Mutex::new(debug_tx));
+
+    //listen on debug channel
+    thread::spawn(move || {
+        while let Ok(msg) = debug_rx.recv() {
+            if debug {
+                println!("debug: {}", msg);
+            }
+        }
+    });
 
     //start up the p2p service
-    let event_rx = rustdht::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
+    let dht_rx = rustdht::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
 
     //start listening on the application
-    let (lookup_table, entities, fields, debug_tx) = (lookup_table.clone(), entities.clone(), fields.clone(), debug_tx.clone());
+    let (lookup_table, entities, fields, arc_debug_tx_closure) = (lookup_table.clone(), entities.clone(), fields.clone(), arc_debug_tx.clone());
     let listener = TcpListener::bind(app_addr).unwrap();
     thread::spawn(move || {
         for stream in listener.incoming() {
-            let (lookup_table, entities, fields, debug_tx) = (lookup_table.clone(), entities.clone(), fields.clone(), debug_tx.clone());
+            let (lookup_table, entities, fields, arc_debug_tx) = (lookup_table.clone(), entities.clone(), fields.clone(), arc_debug_tx_closure.clone());
 
             thread::spawn(move || {
                 let mut stream = stream.unwrap();
@@ -199,6 +209,9 @@ pub fn main() {
                                     //insert entity into entities
                                     let mut entities = entities.write().unwrap();
                                     entities.insert(write_entity_msg.get_entity_key(), entity);
+
+                                    //send debug information
+                                    let debug_tx = arc_debug_tx.lock().unwrap();
                                     debug_tx.send(format!("wrote entity with key {}", write_entity_msg.get_entity_key())).unwrap();
                                 },
                                 Ok(WriteFieldMsg(write_field_msg)) => {
@@ -221,6 +234,9 @@ pub fn main() {
 
                                     let mut entity_tokens = field_values.get_mut(&value[..]).unwrap();
                                     entity_tokens.push_back(write_field_msg.get_entity_key());
+
+                                    //send debug information
+                                    let debug_tx = arc_debug_tx.lock().unwrap();
                                     debug_tx.send(format!("wrote field value {} for field name {} and entity key {}", value, fieldname, write_field_msg.get_entity_key())).unwrap();
                                 },
                                 Ok(_) => panic!("Unknown message type on write stream"),
@@ -430,6 +446,9 @@ pub fn main() {
 
                         //send entity message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                        //send debug information
+                        let debug_tx = arc_debug_tx.lock().unwrap();
                         debug_tx.send(format!("query entity for key '{}'", query_entity_msg)).unwrap();
                     },
                     Ok(QueryFilterMsg(query_filter_msg)) => {
@@ -445,6 +464,7 @@ pub fn main() {
 
                         //query
                         let entity_keys = fuzzydb::query::query_field(filter.get_field_name().unwrap(), filter.get_filter_type().unwrap(), params, filter.get_value().unwrap(), &fields);
+                        let keys = entity_keys.iter().map(|x| { format!("{}", *x) } ).collect::<Vec<String>>().join(",");
 
                         //create entity keys message
                         let mut msg_builder = capnp::message::Builder::new_default();
@@ -461,13 +481,16 @@ pub fn main() {
 
                         //send entity keys message
                         capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                        //send debug information
+                        let debug_tx = arc_debug_tx.lock().unwrap();
                         debug_tx.send(
                             format!(
                                 "filter type '{}' on field '{}' for value '{}' results in entity keys '{}'",
                                 filter.get_filter_type().unwrap(),
                                 filter.get_field_name().unwrap(),
                                 filter.get_value().unwrap(),
-                                ""
+                                keys
                             )
                         ).unwrap();
                     },
@@ -480,28 +503,21 @@ pub fn main() {
         }
     });
 
-    //listen on debug channel
-    if debug {
-        thread::spawn(move || {
-            while let Ok(msg) = debug_rx.recv() {
-                println!("debug: {}", msg);
-            }
-        });
-    }
-
     //listen for events from the p2p service
-    while let Ok(event) = event_rx.recv() {
+    while let Ok(event) = dht_rx.recv() {
         match event {
             Event::LookupTableMsgEvent(lookup_table) => {
-                println!("PeerTableMsgEvent");
-                for (token, socket_addr) in lookup_table.iter() {
-                    println!("{}: {}", token, socket_addr);
-                }
+                let debug_tx = arc_debug_tx.lock().unwrap();
+                debug_tx.send(format!("recv PeerTableMsgEvent with {} entries", lookup_table.len())).unwrap();
             },
             Event::RegisterTokenMsgEvent(token, socket_addr) => {
-                println!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr);
+                let debug_tx = arc_debug_tx.lock().unwrap();
+                debug_tx.send(format!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr)).unwrap();
             },
-            _ => println!("not processing this event type"),
+            _ => {
+                let debug_tx = arc_debug_tx.lock().unwrap();
+                debug_tx.send("recv event from dht - not processing this type of event".to_string()).unwrap();
+            },
         }
     }
 }

@@ -103,6 +103,5 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
-- push the event messages from rustp2p to the debug output
-- testing functionality in all of the code
+- refactor operations to functions to simplify code in client/server applications
 - all kinds of error handling - there's essentially none currently

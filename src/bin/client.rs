@@ -25,7 +25,7 @@ fn main() {
     let mut debug = false;
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
-        parser.set_description("Start up a fuzzydb client session");
+        parser.set_description("start a fuzzydb client session");
         parser.refer(&mut host_ip).add_option(&["-i", "--host-ip"], Store, "Ip address of the host to connect to").required();
         parser.refer(&mut host_port).add_option(&["-p", "--host-port"], Store, "Port of the host to connect to").required();
         parser.refer(&mut batch_size).add_option(&["-b", "--batch-size"], Store, "Number of records in each batch sent for insertion");
@@ -101,18 +101,15 @@ fn main() {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
                             let mut insert_entities_msg = msg.get_msg_type().init_insert_entities_msg(rb_clone.len() as u32);
                         
-                            let mut index = 0;
-                            for record in rb_clone {
-                                let entity = insert_entities_msg.borrow().get(index);
+                            for (i, record) in rb_clone.iter().enumerate() {
+                                let entity = insert_entities_msg.borrow().get(i as u32);
                                 let mut fields = entity.init_fields(header.len() as u32);
 
-                                for i in 0..header.len() {
-                                    let mut field = fields.borrow().get(i as u32);
-                                    field.set_name(&header[i][..]);
-                                    field.set_value(&record[i].to_lowercase()[..]);
+                                for j in 0..header.len() {
+                                    let mut field = fields.borrow().get(j as u32);
+                                    field.set_name(&header[j][..]);
+                                    field.set_value(&record[j].to_lowercase()[..]);
                                 }
-
-                                index += 1;
                             }
                         }
 
@@ -148,18 +145,15 @@ fn main() {
                         let msg = msg_builder.init_root::<message_capnp::message::Builder>(); 
                         let mut insert_entities_msg = msg.get_msg_type().init_insert_entities_msg(record_buffer.len() as u32);
                     
-                        let mut index = 0;
-                        for record in record_buffer {
-                            let entity = insert_entities_msg.borrow().get(index);
+                        for (i, record) in record_buffer.iter().enumerate() {
+                            let entity = insert_entities_msg.borrow().get(i as u32);
                             let mut fields = entity.init_fields(header.len() as u32);
 
-                            for i in 0..header.len() {
-                                let mut field = fields.borrow().get(i as u32);
-                                field.set_name(&header[i][..]);
-                                field.set_value(&record[i].to_lowercase()[..]);
+                            for j in 0..header.len() {
+                                let mut field = fields.borrow().get(j as u32);
+                                field.set_name(&header[j][..]);
+                                field.set_value(&record[j].to_lowercase()[..]);
                             }
-
-                            index += 1;
                         }
                     }
 
@@ -195,21 +189,16 @@ fn main() {
                 {
                     let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                     let mut query_msg = msg.get_msg_type().init_query_msg(filters.len() as u32);
-                    let mut filter_index = 0;
-                    for filter in filters {
-                        let mut query_filter = query_msg.borrow().get(filter_index);
+                    for (i, filter) in filters.iter().enumerate() {
+                        let mut query_filter = query_msg.borrow().get(i as u32);
                         query_filter.set_field_name(&filter.field_name[..]);
                         query_filter.set_filter_type(&filter.filter_type[..]);
                         query_filter.set_value(&filter.value[..]);
                         
                         let mut filter_params = query_filter.init_params(filter.params.len() as u32);
-                        let mut param_index = 0;
-                        for param in filter.params {
-                            filter_params.set(param_index, &param[..]);
-                            param_index += 1;
+                        for (j, param) in filter.params.iter().enumerate() {
+                            filter_params.set(j as u32, &param[..]);
                         }
-
-                        filter_index += 1;
                     }
                 }
 

@@ -103,5 +103,5 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
-- refactor operations to functions to simplify code in client/server applications
+- create get_entity_keys() function and refactor a bit of the work out of server main function
 - all kinds of error handling - there's essentially none currently

@@ -10,13 +10,13 @@ use fuzzydb::message_capnp::message::msg_type::{CloseWriteStreamMsg,InsertEntiti
 extern crate rustdht;
 use rustdht::zero_hop::event::Event;
 
-use std::collections::{BTreeMap,HashMap,HashSet,LinkedList};
+use std::collections::{BTreeMap,HashMap,HashSet};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,Shutdown,TcpListener,TcpStream};
 use std::str::FromStr;
 use std::sync::{Arc,Mutex,RwLock};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel,Sender};
 use std::thread;
 
 pub fn main() {
@@ -30,7 +30,7 @@ pub fn main() {
     let mut debug = false;
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
-        parser.set_description("start up a echo server");
+        parser.set_description("start an instance of fuzzydb server");
         parser.refer(&mut id).add_option(&["-i", "--id"], Store, "id of node").required();
         parser.refer(&mut token).add_option(&["-t", "--token"], Store, "token of node").required();
         parser.refer(&mut app_ip).add_option(&["-l", "--listen-ip"], Store, "ip address for application and service to listen on").required();
@@ -59,7 +59,7 @@ pub fn main() {
     //create application specific variables
     let lookup_table = Arc::new(RwLock::new(BTreeMap::new()));
     let entities: Arc<RwLock<HashMap<u64,HashMap<String,String>>>> = Arc::new(RwLock::new(HashMap::new()));
-    let fields: Arc<RwLock<HashMap<String,HashMap<String,LinkedList<u64>>>>> = Arc::new(RwLock::new(HashMap::new()));
+    let fields: Arc<RwLock<HashMap<String,HashMap<String,Vec<u64>>>>> = Arc::new(RwLock::new(HashMap::new()));
     let (debug_tx, debug_rx) = channel::<String>();
     let arc_debug_tx = Arc::new(Mutex::new(debug_tx));
 
@@ -116,18 +116,7 @@ pub fn main() {
 
                             //send write entity message
                             {
-                                let stream = streams.entry(socket_addr).or_insert_with(|| {
-                                    let mut stream = TcpStream::connect(socket_addr).unwrap();
-
-                                    let mut msg_builder = capnp::message::Builder::new_default();
-                                    {
-                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        msg.get_msg_type().set_open_write_stream_msg(());
-                                    }
-                                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                                    stream
-                                });
+                                let stream = streams.entry(socket_addr).or_insert_with(|| { open_write_stream(socket_addr) });
                                 capnp::serialize::write_message(stream, &msg_builder).unwrap();
                             }
 
@@ -136,10 +125,7 @@ pub fn main() {
                                 //compute hash of field value
                                 let mut hasher = SipHasher::new();
                                 field.get_value().unwrap().hash(&mut hasher);
-                                let field_token = hasher.finish();
-
-                                //lookup into peer table
-                                let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, field_token).unwrap();
+                                let field_hash = hasher.finish();
 
                                 //create write field message
                                 let mut msg_builder = capnp::message::Builder::new_default();
@@ -151,18 +137,8 @@ pub fn main() {
                                 }
 
                                 //send write field message
-                                let stream = streams.entry(socket_addr).or_insert_with(|| {
-                                    let mut stream = TcpStream::connect(socket_addr).unwrap();
-
-                                    let mut msg_builder = capnp::message::Builder::new_default();
-                                    {
-                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        msg.get_msg_type().set_open_write_stream_msg(());
-                                    }
-                                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                                    stream
-                                });
+                                let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, field_hash).unwrap();
+                                let stream = streams.entry(socket_addr).or_insert_with(|| { open_write_stream(socket_addr) });
                                 capnp::serialize::write_message(stream, &msg_builder).unwrap();
                             }
                         }
@@ -218,26 +194,16 @@ pub fn main() {
                                     //get field_values HashMap<String,[]u64>
                                     let mut fields = fields.write().unwrap();
                                     let field = write_field_msg.get_field().unwrap();
-                                    let fieldname = field.get_name().unwrap();
+                                    let (fieldname, field_value) = (field.get_name().unwrap(), field.get_value().unwrap());
                                     
-                                    if !fields.contains_key(&fieldname[..]) {
-                                        fields.insert(fieldname.to_string(), HashMap::new());
-                                    }
-                                    
-                                    let mut field_values = fields.get_mut(&fieldname[..]).unwrap();
-
-                                    //add key for message
-                                    let value = field.get_value().unwrap();
-                                    if !field_values.contains_key(&value[..]) {
-                                        field_values.insert(value.to_string(), LinkedList::new());
-                                    }
-
-                                    let mut entity_tokens = field_values.get_mut(&value[..]).unwrap();
-                                    entity_tokens.push_back(write_field_msg.get_entity_key());
+                                    //search for and create entry in fields if necessary
+                                    let mut field_values = fields.entry(fieldname.to_string()).or_insert(HashMap::new());
+                                    let mut entity_keys = field_values.entry(field_value.to_string()).or_insert(vec!());
+                                    entity_keys.push(write_field_msg.get_entity_key());
 
                                     //send debug information
                                     let debug_tx = arc_debug_tx.lock().unwrap();
-                                    debug_tx.send(format!("wrote field value {} for field name {} and entity key {}", value, fieldname, write_field_msg.get_entity_key())).unwrap();
+                                    debug_tx.send(format!("wrote field value {} for field name {} and entity key {}", field_value, fieldname, write_field_msg.get_entity_key())).unwrap();
                                 },
                                 Ok(_) => panic!("Unknown message type on write stream"),
                                 Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
@@ -284,10 +250,8 @@ pub fn main() {
                                         query_filter_msg.set_value(&value[..]);
 
                                         let mut filter_params = query_filter_msg.init_params(params.len() as u32);
-                                        let mut param_index = 0;
-                                        for param in params {
-                                            filter_params.set(param_index, &param[..]);
-                                            param_index += 1;
+                                        for (i, param) in params.iter().enumerate() {
+                                            filter_params.set(i as u32, &param[..]);
                                         }
                                     }
 
@@ -346,78 +310,31 @@ pub fn main() {
 
                         //create entities message
                         {
-                            let mut thread_handles = vec!();
-                            let entities = Arc::new(RwLock::new(vec!()));
-                            for entity_key in entity_keyset {
-                                let (entities, lookup_table) = (entities.clone(), lookup_table.clone());
+                            //poll for entities
+                            let (entities_tx, entities_rx) = channel::<HashMap<String,String>>();
+                            let entity_keyset_len = entity_keyset.len();
+                            get_entities(entity_keyset, lookup_table, entities_tx);
 
-                                let handle = thread::spawn(move || {
-                                    let lookup_table = lookup_table.read().unwrap();
-                                    let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
-                                    
-                                    //create query entity message
-                                    let mut msg_builder = capnp::message::Builder::new_default();
-                                    {
-                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        msg.get_msg_type().set_query_entity_msg(entity_key);
-                                    }
-                                
-                                    //send query entity message
-                                    let mut stream = TcpStream::connect(socket_addr).unwrap();
-                                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                                    //read entity message
-                                    let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
-                                    let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
-
-                                    //create map and add all fields to it
-                                    let mut entity = HashMap::new();
-
-                                    //parse out message
-                                    match msg.get_msg_type().which() {
-                                        Ok(EntityMsg(entity_msg)) => {
-                                            let fields = entity_msg.unwrap();
-                                            for field in fields.iter() {
-                                                entity.insert(field.get_name().unwrap().to_string(), field.get_value().unwrap().to_string());
-                                            }
-                                        },
-                                        Ok(_) => panic!("Unknown message type"),
-                                        Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
-                                    }
-
-                                    let mut entities = entities.write().unwrap();
-                                    entities.push(entity);
-                                });
-
-                                thread_handles.push(handle);
-                            }
-                            
-                            //wait for all threads to join
-                            for handle in thread_handles {
-                                handle.join().unwrap();
+                            let mut entity_vec = vec!();
+                            for _ in 0..entity_keyset_len {
+                                entity_vec.push(entities_rx.recv().unwrap());
                             }
 
                             //create entities message
                             let mut msg_builder = capnp::message::Builder::new_default();
                             {
-                                let entities = entities.read().unwrap();
-
                                 let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                let mut entities_msg = msg.get_msg_type().init_entities_msg(entities.len() as u32);
+                                let mut entities_msg = msg.get_msg_type().init_entities_msg(entity_vec.len() as u32);
 
-                                let mut index = 0;
-                                for entity in entities.iter() {
-                                    let entity_msg = entities_msg.borrow().get(index);
+                                for (i, entity) in entity_vec.iter().enumerate() {
+                                    let entity_msg = entities_msg.borrow().get(i as u32);
                                     let mut fields = entity_msg.init_fields(entity.len() as u32);
-                                    let mut field_index = 0;
-                                    for (name, value) in entity {
-                                        let mut field = fields.borrow().get(field_index);
+
+                                    for (j, (name, value)) in entity.iter().enumerate() {
+                                        let mut field = fields.borrow().get(j as u32);
                                         field.set_name(name);
                                         field.set_value(value);
-                                        field_index += 1;
                                     }
-
-                                    index += 1;
                                 }
                             }
 
@@ -435,12 +352,11 @@ pub fn main() {
                         {
                             let msg = msg_builder.init_root::<message_capnp::message::Builder>();
                             let mut entity_msg = msg.get_msg_type().init_entity_msg(entity_fields.len() as u32);
-                            let mut index = 0;
-                            for (name, value) in entity_fields {
-                                let mut field = entity_msg.borrow().get(index);
+
+                            for (i, (name, value)) in entity_fields.iter().enumerate() {
+                                let mut field = entity_msg.borrow().get(i as u32);
                                 field.set_name(name);
                                 field.set_value(value);
-                                index += 1;
                             }
                         }
 
@@ -462,7 +378,7 @@ pub fn main() {
                             params.push(filter_params.get(i).unwrap());
                         }
 
-                        //query
+                        //perform actual query
                         let entity_keys = fuzzydb::query::query_field(filter.get_field_name().unwrap(), filter.get_filter_type().unwrap(), params, filter.get_value().unwrap(), &fields);
                         let keys = entity_keys.iter().map(|x| { format!("{}", *x) } ).collect::<Vec<String>>().join(",");
 
@@ -519,5 +435,67 @@ pub fn main() {
                 debug_tx.send("recv event from dht - not processing this type of event".to_string()).unwrap();
             },
         }
+    }
+}
+
+fn open_write_stream(socket_addr: SocketAddrV4) -> TcpStream {
+    let mut stream = TcpStream::connect(socket_addr).unwrap();
+
+    let mut msg_builder = capnp::message::Builder::new_default();
+    {
+        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+        msg.get_msg_type().set_open_write_stream_msg(());
+    }
+    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+    stream
+}
+
+fn get_entity_keys() {
+
+}
+
+fn get_entities(entity_keyset: HashSet<u64>, lookup_table: Arc<RwLock<BTreeMap<u64,SocketAddrV4>>>, entity_tx: Sender<HashMap<String,String>>) {
+    let entity_tx = Arc::new(Mutex::new(entity_tx));
+    for entity_key in entity_keyset {
+        let (lookup_table, entity_tx) = (lookup_table.clone(), entity_tx.clone());
+
+        thread::spawn(move || {
+            let lookup_table = lookup_table.read().unwrap();
+            let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
+            
+            //create query entity message
+            let mut msg_builder = capnp::message::Builder::new_default();
+            {
+                let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                msg.get_msg_type().set_query_entity_msg(entity_key);
+            }
+        
+            //send query entity message
+            let mut stream = TcpStream::connect(socket_addr).unwrap();
+            capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+            //read entity message
+            let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+            let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+            //create map and add all fields to it
+            let mut entity = HashMap::new();
+
+            //parse out message
+            match msg.get_msg_type().which() {
+                Ok(EntityMsg(entity_msg)) => {
+                    let fields = entity_msg.unwrap();
+                    for field in fields.iter() {
+                        entity.insert(field.get_name().unwrap().to_string(), field.get_value().unwrap().to_string());
+                    }
+                },
+                Ok(_) => panic!("Unknown message type"),
+                Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+            }
+
+            let entity_tx = entity_tx.lock().unwrap();
+            entity_tx.send(entity).unwrap();
+        });
     }
 }

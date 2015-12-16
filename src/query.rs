@@ -1,8 +1,8 @@
 extern crate ruzzy;
 
-use std::collections::{HashMap,HashSet,LinkedList};
+use std::collections::{HashMap,HashSet};
 
-pub fn query_field(field_name: &str, filter_type: &str, params: Vec<&str>, field_value: &str, fields: &HashMap<String,HashMap<String,LinkedList<u64>>>) -> HashSet<u64> {
+pub fn query_field(field_name: &str, filter_type: &str, params: Vec<&str>, field_value: &str, fields: &HashMap<String,HashMap<String,Vec<u64>>>) -> HashSet<u64> {
     let mut entity_keys = HashSet::new();
     if fields.contains_key(&field_name[..]) {
         let field_values = fields.get(&field_name[..]).unwrap();

@@ -103,5 +103,5 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
-- create get_entity_keys() function and refactor a bit of the work out of server main function
+- add status command to client to can get back information about the cluster(# of nodes and tokens, amount of data, etc...)
 - all kinds of error handling - there's essentially none currently

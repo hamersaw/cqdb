@@ -10,7 +10,7 @@ use fuzzydb::message_capnp::message::msg_type::{CloseWriteStreamMsg,InsertEntiti
 extern crate rustdht;
 use rustdht::zero_hop::event::Event;
 
-use std::collections::{BTreeMap,HashMap,HashSet};
+use std::collections::{BTreeMap,HashMap};
 use std::hash::{Hash,Hasher,SipHasher};
 use std::io::{Read,Write};
 use std::net::{Ipv4Addr,SocketAddrV4,Shutdown,TcpListener,TcpStream};
@@ -211,112 +211,18 @@ pub fn main() {
                         }
                     },
                     Ok(QueryMsg(query_msg)) => {
-                        let filter_keyset: Arc<RwLock<HashSet<u64>>> = Arc::new(RwLock::new(HashSet::new()));
-                        let mut entity_keyset = HashSet::new();
-                        let mut first_iteration = true;
-
-                        //submit filter queries
-                        for filter in query_msg.unwrap().iter() {
-                            //clear filter keyset
-                            {
-                                let mut filter_keyset = filter_keyset.write().unwrap();
-                                filter_keyset.clear();
-                            }
-
-                            let filter_params = filter.get_params().unwrap();
-                            let mut params = Vec::new();
-                            for i in 0..filter_params.len() {
-                                params.push(filter_params.get(i).unwrap().to_string());
-                            }
-
-                            //send query field messages to all peers
-                            let mut thread_handles = Vec::new();
-                            let lookup_table = lookup_table.read().unwrap();
-                            for (_, peer_socket_addr) in lookup_table.iter() {
-                                //create variables for query filter message
-                                let field_name = filter.get_field_name().unwrap().to_string();
-                                let filter_type = filter.get_filter_type().unwrap().to_string();
-                                let value = filter.get_value().unwrap().to_string();
-                                let (params, filter_keyset, peer_socket_addr) = (params.clone(), filter_keyset.clone(), peer_socket_addr.clone());
-
-                                let handle = thread::spawn(move || {
-                                    //create query filter message
-                                    let mut msg_builder = capnp::message::Builder::new_default();
-                                    {
-                                        let msg = msg_builder.init_root::<message_capnp::message::Builder>();
-                                        let mut query_filter_msg = msg.get_msg_type().init_query_filter_msg();
-                                        query_filter_msg.set_field_name(&field_name[..]);
-                                        query_filter_msg.set_filter_type(&filter_type[..]);
-                                        query_filter_msg.set_value(&value[..]);
-
-                                        let mut filter_params = query_filter_msg.init_params(params.len() as u32);
-                                        for (i, param) in params.iter().enumerate() {
-                                            filter_params.set(i as u32, &param[..]);
-                                        }
-                                    }
-
-                                    //send query filter message
-                                    let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
-                                    capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
-
-                                    //read entity tokens message
-                                    let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
-                                    let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
-
-                                    //parse out message
-                                    match msg.get_msg_type().which() {
-                                        Ok(EntityKeysMsg(entity_keys_msg)) => {
-                                            //add to entity tokens list
-                                            let mut filter_keyset = filter_keyset.write().unwrap();
-                                            let entity_keys = entity_keys_msg.unwrap();
-                                            for i in 0..entity_keys.len() {
-                                                filter_keyset.insert(entity_keys.get(i));
-                                            }
-                                        },
-                                        Ok(_) => panic!("Unknown message type"),
-                                        Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
-                                    }
-
-                                });
-
-                                thread_handles.push(handle);
-                            }
-
-                            //wait for all threads to join
-                            for handle in thread_handles {
-                                handle.join().unwrap();
-                            }
-
-                            //update entity token set
-                            if first_iteration {
-                                let filter_keyset = filter_keyset.read().unwrap();
-                                for entity_key in filter_keyset.iter() {
-                                    entity_keyset.insert(*entity_key);
-                                }
-                                first_iteration = false;
-                            } else {
-                                let filter_keyset = filter_keyset.read().unwrap();
-                                let diff_keyset: HashSet<u64> = entity_keyset.difference(&filter_keyset).cloned().collect();
-                                for entity_key in diff_keyset {
-                                    entity_keyset.remove(&entity_key);
-                                }
-                            }
-
-                            //if no tokens then no need to loop through more filters
-                            if entity_keyset.is_empty() {
-                                break;
-                            }
-                        }
-
+                        //get entity keys
+                        let entity_keys = get_entity_keys(query_msg.unwrap(), &lookup_table);
+                        
                         //create entities message
                         {
                             //poll for entities
                             let (entities_tx, entities_rx) = channel::<HashMap<String,String>>();
-                            let entity_keyset_len = entity_keyset.len();
-                            get_entities(entity_keyset, lookup_table, entities_tx);
+                            let entity_keys_len = entity_keys.len();
+                            get_entities(entity_keys, lookup_table, entities_tx);
 
                             let mut entity_vec = vec!();
-                            for _ in 0..entity_keyset_len {
+                            for _ in 0..entity_keys_len {
                                 entity_vec.push(entities_rx.recv().unwrap());
                             }
 
@@ -451,11 +357,103 @@ fn open_write_stream(socket_addr: SocketAddrV4) -> TcpStream {
     stream
 }
 
-fn get_entity_keys() {
+fn get_entity_keys(filters: capnp::struct_list::Reader<fuzzydb::message_capnp::filter::Owned>, lookup_table: &Arc<RwLock<BTreeMap<u64,SocketAddrV4>>>) -> Vec<u64> {
+    let mut entity_keys = vec!();
 
+    //submit filter queries
+    for (i, filter) in filters.iter().enumerate() {
+        let filter_params = filter.get_params().unwrap();
+        let mut params = Vec::new();
+        for j in 0..filter_params.len() {
+            params.push(filter_params.get(j).unwrap().to_string());
+        }
+
+        let (keys_tx, keys_rx) = channel::<Vec<u64>>();
+        let keys_tx = Arc::new(Mutex::new(keys_tx));
+
+        //send query field messages to all peers
+        let lookup_table = lookup_table.read().unwrap();
+        for (_, peer_socket_addr) in lookup_table.iter() {
+            //create variables for query filter message
+            let field_name = filter.get_field_name().unwrap().to_string();
+            let filter_type = filter.get_filter_type().unwrap().to_string();
+            let value = filter.get_value().unwrap().to_string();
+            let (params, peer_socket_addr, keys_tx) = (params.clone(), peer_socket_addr.clone(), keys_tx.clone());
+
+            thread::spawn(move || {
+                //create query filter message
+                let mut msg_builder = capnp::message::Builder::new_default();
+                {
+                    let msg = msg_builder.init_root::<message_capnp::message::Builder>();
+                    let mut query_filter_msg = msg.get_msg_type().init_query_filter_msg();
+                    query_filter_msg.set_field_name(&field_name[..]);
+                    query_filter_msg.set_filter_type(&filter_type[..]);
+                    query_filter_msg.set_value(&value[..]);
+
+                    let mut filter_params = query_filter_msg.init_params(params.len() as u32);
+                    for (i, param) in params.iter().enumerate() {
+                        filter_params.set(i as u32, &param[..]);
+                    }
+                }
+
+                //send query filter message
+                let mut stream = TcpStream::connect(peer_socket_addr).unwrap();
+                capnp::serialize::write_message(&mut stream, &msg_builder).unwrap();
+
+                //read entity tokens message
+                let msg_reader = capnp::serialize::read_message(&mut stream, ::capnp::message::ReaderOptions::new()).unwrap();
+                let msg = msg_reader.get_root::<message_capnp::message::Reader>().unwrap();
+
+                //parse out message
+                match msg.get_msg_type().which() {
+                    Ok(EntityKeysMsg(entity_keys_msg)) => {
+                        //add to entity tokens list
+                        let mut keys = vec!();
+                        let entity_keys = entity_keys_msg.unwrap();
+                        for i in 0..entity_keys.len() {
+                            keys.push(entity_keys.get(i));
+                        }
+
+                        let keys_tx = keys_tx.lock().unwrap();
+                        keys_tx.send(keys).unwrap();
+                    },
+                    Ok(_) => panic!("Unknown message type"),
+                    Err(capnp::NotInSchema(e)) => panic!("Error capnp::NotInSchema: {}", e),
+                }
+
+            });
+        }
+
+        //compile set of keys for filter
+        let mut filter_keys = vec!();
+        for _ in 0..lookup_table.len() {
+            let keys = keys_rx.recv().unwrap();
+
+            for key in keys {
+                filter_keys.push(key);
+            }
+        }
+
+        if i == 0 {
+            //first filter
+            for key in filter_keys.iter() {
+                entity_keys.push(*key);
+            }
+        } else {
+            //compute intersection with our running entity keys
+            entity_keys = entity_keys.iter().filter(|x| filter_keys.contains(x)).map(|x| *x).collect();
+        }
+
+        //if no tokens then no need to loop through more filters
+        if entity_keys.is_empty() {
+            break;
+        }
+    }
+
+    entity_keys
 }
 
-fn get_entities(entity_keyset: HashSet<u64>, lookup_table: Arc<RwLock<BTreeMap<u64,SocketAddrV4>>>, entity_tx: Sender<HashMap<String,String>>) {
+fn get_entities(entity_keyset: Vec<u64>, lookup_table: Arc<RwLock<BTreeMap<u64,SocketAddrV4>>>, entity_tx: Sender<HashMap<String,String>>) {
     let entity_tx = Arc::new(Mutex::new(entity_tx));
     for entity_key in entity_keyset {
         let (lookup_table, entity_tx) = (lookup_table.clone(), entity_tx.clone());

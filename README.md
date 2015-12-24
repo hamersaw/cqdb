@@ -102,7 +102,6 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
-- change flag for listen-ip to 'i' from 'l'
 - add status command to client to can get back information about the cluster(# of nodes and tokens, amount of data, etc...)
 - all kinds of error handling - there's essentially none currently
 - create new client application to match a csv file and output the results

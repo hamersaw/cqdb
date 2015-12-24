@@ -6,18 +6,18 @@ A distributed database for fuzzy matching entities.
 ##Examples
 ####Server
 ```bash
-./server -i coeus -t 0 -l 127.0.0.1 -a 15605 -p 15705
-./server -i crius -t 1537228672809129301 -l 127.0.0.1 -a 15606 -p 15706 -s 127.0.0.1 -e 15705
-./server -i cronus -t 3074457345618258602 -l 127.0.0.1 -a 15607 -p 15707 -s 127.0.0.1 -e 15705
-./server -i hyperion -t 4611686018427387903 -l 127.0.0.1 -a 15608 -p 15708 -s 127.0.0.1 -e 15705
-./server -i lapetus -t 6148914691236517204 -l 127.0.0.1 -a 15609 -p 15709 -s 127.0.0.1 -e 15705
-./server -i mnemosyne -t 7686143364045646505 -l 127.0.0.1 -a 15610 -p 15710 -s 127.0.0.1 -e 15705
-./server -i oceanus -t 9223372036854775806 -l 127.0.0.1 -a 15611 -p 15711 -s 127.0.0.1 -e 15705
-./server -i phoebe -t 10760600709663905107 -l 127.0.0.1 -a 15612 -p 15712 -s 127.0.0.1 -e 15705
-./server -i rhea -t 12297829382473034408 -l 127.0.0.1 -a 15613 -p 15713 -s 127.0.0.1 -e 15705
-./server -i tethys -t 13835058055282163709 -l 127.0.0.1 -a 15614 -p 15714 -s 127.0.0.1 -e 15705
-./server -i theia -t 15372286728091293010 -l 127.0.0.1 -a 15615 -p 15715 -s 127.0.0.1 -e 15705
-./server -i themis -t 16909515400900422311 -l 127.0.0.1 -a 15616 -p 15716 -s 127.0.0.1 -e 15705
+./server -t 0 -i 127.0.0.1 -a 15605 -p 15705
+./server -t 1537228672809129301 -i 127.0.0.1 -a 15606 -p 15706 -s 127.0.0.1 -e 15705
+./server -t 3074457345618258602 -i 127.0.0.1 -a 15607 -p 15707 -s 127.0.0.1 -e 15705
+./server -t 4611686018427387903 -i 127.0.0.1 -a 15608 -p 15708 -s 127.0.0.1 -e 15705
+./server -t 6148914691236517204 -i 127.0.0.1 -a 15609 -p 15709 -s 127.0.0.1 -e 15705
+./server -t 7686143364045646505 -i 127.0.0.1 -a 15610 -p 15710 -s 127.0.0.1 -e 15705
+./server -t 9223372036854775806 -i 127.0.0.1 -a 15611 -p 15711 -s 127.0.0.1 -e 15705
+./server -t 10760600709663905107 -i 127.0.0.1 -a 15612 -p 15712 -s 127.0.0.1 -e 15705
+./server -t 12297829382473034408 -i 127.0.0.1 -a 15613 -p 15713 -s 127.0.0.1 -e 15705
+./server -t 13835058055282163709 -i 127.0.0.1 -a 15614 -p 15714 -s 127.0.0.1 -e 15705
+./server -t 15372286728091293010 -i 127.0.0.1 -a 15615 -p 15715 -s 127.0.0.1 -e 15705
+./server -t 16909515400900422311 -i 127.0.0.1 -a 15616 -p 15716 -s 127.0.0.1 -e 15705
 ```
 
 ####Client
@@ -37,13 +37,12 @@ SELECT first_name, last_name, email WHERE first_name ~levenshtein(3) danny AND l
 
 ####Filter types
 ```bash
-~damerau_levenshtein(max_distance)
+~damerau_levenshtein(maximum_distance)
 ~equality()
-~hamming(max_distance)
-~jaro(min_score)
-~jaro_winkler(min_score)
-~levenshtein(max_distance)
-~ngram(ngram_size,mins_score)
+~jaro(minimum_score)
+~jaro_winkler(minimum_score)
+~levenshtein(maximum_distance)
+~ngram(ngram_size,minimum_score)
 ~soundex()
 ```
 
@@ -103,5 +102,7 @@ node3 - token:99
 
 ##TODO
 - need quoted fields in parser
+- change flag for listen-ip to 'i' from 'l'
 - add status command to client to can get back information about the cluster(# of nodes and tokens, amount of data, etc...)
 - all kinds of error handling - there's essentially none currently
+- create new client application to match a csv file and output the results

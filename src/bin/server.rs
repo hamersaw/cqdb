@@ -8,7 +8,7 @@ use fuzzydb::message_capnp;
 use fuzzydb::message_capnp::message::msg_type::{CloseWriteStreamMsg,InsertEntitiesMsg,EntityMsg,EntityKeysMsg,OpenWriteStreamMsg,QueryMsg,QueryEntityMsg,QueryFilterMsg,WriteEntityMsg,WriteFieldMsg};
 
 extern crate rustdht;
-use rustdht::zero_hop::event::Event;
+use rustdht::event::Event;
 
 use std::collections::{BTreeMap,HashMap};
 use std::hash::{Hash,Hasher,SipHasher};
@@ -20,7 +20,6 @@ use std::sync::mpsc::{channel,Sender};
 use std::thread;
 
 pub fn main() {
-    let mut id = "World".to_string();
     let mut token: u64 = 0;
     let mut app_ip: String = "127.0.0.1".to_string();
     let mut app_port: u16 = 0;
@@ -31,9 +30,8 @@ pub fn main() {
     {    //solely to limit scope of parser variable
         let mut parser = ArgumentParser::new();
         parser.set_description("start an instance of fuzzydb server");
-        parser.refer(&mut id).add_option(&["-i", "--id"], Store, "id of node").required();
         parser.refer(&mut token).add_option(&["-t", "--token"], Store, "token of node").required();
-        parser.refer(&mut app_ip).add_option(&["-l", "--listen-ip"], Store, "ip address for application and service to listen on").required();
+        parser.refer(&mut app_ip).add_option(&["-i", "--listen-ip"], Store, "ip address for application and service to listen on").required();
         parser.refer(&mut app_port).add_option(&["-a", "--app-port"], Store, "port for application to listen on").required();
         parser.refer(&mut service_port).add_option(&["-p", "--service-port"], Store, "port for the p2p service listen on").required();
         parser.refer(&mut seed_ip).add_option(&["-s", "--seed-ip"], Store, "p2p service seed node ip address");
@@ -73,7 +71,7 @@ pub fn main() {
     });
 
     //start up the p2p service
-    let dht_rx = rustdht::zero_hop::service::start(id, token, app_addr, service_addr, seed_addr, lookup_table.clone());
+    let dht_rx = rustdht::service::start(token, app_addr, service_addr, seed_addr, lookup_table.clone());
 
     //start listening on the application
     let (lookup_table, entities, fields, arc_debug_tx_closure) = (lookup_table.clone(), entities.clone(), fields.clone(), arc_debug_tx.clone());
@@ -103,7 +101,7 @@ pub fn main() {
 
                             //lookup into peer table
                             let lookup_table = lookup_table.read().unwrap();
-                            let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
+                            let socket_addr = rustdht::service::lookup(&lookup_table, entity_key).unwrap();
 
                             //create write entity message
                             let mut msg_builder = capnp::message::Builder::new_default();
@@ -137,7 +135,7 @@ pub fn main() {
                                 }
 
                                 //send write field message
-                                let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, field_hash).unwrap();
+                                let socket_addr = rustdht::service::lookup(&lookup_table, field_hash).unwrap();
                                 let stream = streams.entry(socket_addr).or_insert_with(|| { open_write_stream(socket_addr) });
                                 capnp::serialize::write_message(stream, &msg_builder).unwrap();
                             }
@@ -332,14 +330,18 @@ pub fn main() {
                 let debug_tx = arc_debug_tx.lock().unwrap();
                 debug_tx.send(format!("recv PeerTableMsgEvent with {} entries", lookup_table.len())).unwrap();
             },
-            Event::RegisterTokenMsgEvent(token, socket_addr) => {
+            Event::RemoveNodeEvent(token, socket_addr) => {
                 let debug_tx = arc_debug_tx.lock().unwrap();
-                debug_tx.send(format!("recv RegisterTokenMsgEvent({}, {})", token, socket_addr)).unwrap();
+                debug_tx.send(format!("recv RemoveNodeEvent({}, {})", token, socket_addr)).unwrap();
             },
-            _ => {
+            Event::RegisterNodeEvent(token, socket_addr) => {
+                let debug_tx = arc_debug_tx.lock().unwrap();
+                debug_tx.send(format!("recv RegisterNodeEvent({}, {})", token, socket_addr)).unwrap();
+            },
+            /*_ => {
                 let debug_tx = arc_debug_tx.lock().unwrap();
                 debug_tx.send("recv event from dht - not processing this type of event".to_string()).unwrap();
-            },
+            },*/
         }
     }
 }
@@ -460,7 +462,7 @@ fn get_entities(entity_keyset: Vec<u64>, lookup_table: Arc<RwLock<BTreeMap<u64,S
 
         thread::spawn(move || {
             let lookup_table = lookup_table.read().unwrap();
-            let socket_addr = rustdht::zero_hop::service::lookup(&lookup_table, entity_key).unwrap();
+            let socket_addr = rustdht::service::lookup(&lookup_table, entity_key).unwrap();
             
             //create query entity message
             let mut msg_builder = capnp::message::Builder::new_default();

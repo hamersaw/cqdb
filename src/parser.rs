@@ -97,7 +97,7 @@ named!(
         field_name: id ~
         space ~
         tag!("~") ~
-        filter_type: id ~
+        filter_type: unquoted_id ~
         params : filter_params ~
         space ~
         value: id,
@@ -107,25 +107,7 @@ named!(
 
 named!(
     pub id<String>,
-    chain!(
-        chars: many1!(
-            map_res!(
-                alt!(
-                    tag!("-") | tag!("_") | tag!(".") | alphanumeric
-                ), 
-                std::str::from_utf8
-            )
-        ),
-        || {
-            chars.into_iter().fold(
-                "".to_string(), 
-                |mut f, c| {
-                   f.push_str(c);
-                   f
-                }
-            )
-        }
-    )
+    alt!(quoted_id | unquoted_id)
 );
 
 named!(
@@ -202,6 +184,54 @@ named!(
             Command::Query(
                 field_names,
                 rtn_filters,
+            )
+        }
+    )
+);
+
+named!(
+    pub quoted_id<String>,
+    chain!(
+        tag!("\"") ~
+        chars: many1!(
+            map_res!(
+                alt!(
+                    tag!("-") | tag!("_") | tag!(".") | tag!(" ") | tag!("\\\"") | alphanumeric
+                ),
+                std::str::from_utf8
+            )
+        ) ~
+        tag!("\""),
+        || {
+            chars.into_iter().fold(
+                "".to_string(), 
+                |mut f, c| {
+                   f.push_str(c);
+                   f
+                }
+            )
+        }
+    )
+);
+
+named!(
+    pub unquoted_id<String>,
+    chain!(
+        chars: many1!(
+            map_res!(
+                alt!(
+                    tag!("-") | tag!("_") | tag!(".") | alphanumeric
+                ), 
+                std::str::from_utf8
+            )
+        ),
+        || {
+            chars.into_iter().fold(
+                "".to_string(), 
+                |mut f, c| {
+                   f.push_str(c);
+                   f
+                }
             )
         }
     )

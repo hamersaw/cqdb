@@ -101,6 +101,7 @@ node3 - token:99
 5. All entities are returned to client
 
 ##TODO
+- make all commands case insensitive
 - add status command to client to can get back information about the cluster(# of nodes and tokens, amount of data, etc...)
 - all kinds of error handling - there's essentially none currently
 - create new client application to match a csv file and output the results

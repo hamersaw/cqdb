@@ -1,8 +1,5 @@
 #fuzzydb
 
-##NOTE
-This repo is no longer maintained. https://github.com/hamersaw/coterie is the new version.
-
 ##Overview
 A distributed database for fuzzy matching entities.
 
